@@ -8,7 +8,7 @@ Users can request tools the AI doesn't have yet, or the AI can autonomously expa
 
 ***Plug-and-Play Tools for LLMs***
 
-![Example](example_chat.png)
+![Example](https://raw.githubusercontent.com/mcpfinder/server/main/example_chat.png)
 
 This Node.js application implements an MCP (Model Context Protocol) server designed to run locally alongside MCP clients (like Cursor, Claude Desktop, Windsurf). It provides tools that allow AI within the client to interact with the MCP ecosystem.
 

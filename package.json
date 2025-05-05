@@ -12,8 +12,7 @@
     "src",
     "mcp_config_paths.json",
     "README.md",
-    "LICENSE",
-    "example_chat.png"
+    "LICENSE"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
