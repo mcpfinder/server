@@ -130,7 +130,7 @@ async function search_mcp_servers(input) {
     const data = await response.json();
     const formattedContent = data.map(server => ({
       type: 'text',
-      text: `ID: ${server.id}\\nName: ${server.name}\\nDescription: ${server.description}\\nURL: ${server.url}\\nTags: ${server.tags.join(', ')}`
+      text: `ID: ${server.id}\\nName: ${server.name}\\nDescription: ${server.description}\\nURL: ${server.url}\\nTags: ${Array.isArray(server.tags) ? server.tags.join(', ') : 'N/A'}`
     }));
 
     const instructionBlock = {
@@ -670,7 +670,7 @@ if (runSetupFlag) {
       console.log("Running interactive setup...");
       const { runSetup } = await import('./src/setup.js');
       await runSetup();
-      console.log("Setup completed successfully.");
+      console.log("Setup completed successfully. You can now ask the AI to search for and install new tools.");
       process.exit(0);
     } catch (error) {
       if (error.code === 'ERR_MODULE_NOT_FOUND') {
