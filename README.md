@@ -1,6 +1,12 @@
 # MCP Finder Server (`@mcpfinder/server`)
 
-This Node.js application implements an MCP (Model Context Protocol) server designed to run locally alongside MCP clients (like Cursor, Claude Desktop, Windsurf). It provides tools that allow an AI assistant (LLM) within the client to interact with the MCP Finder ecosystem.
+**Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCP Finder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
+
+***"App Store for Agents"***
+
+Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCP Finder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
+
+This Node.js application implements an MCP (Model Context Protocol) server designed to run locally alongside MCP clients (like Cursor, Claude Desktop, Windsurf). It provides tools that allow AI within the client to interact with the MCP ecosystem.
 
 Specifically, it enables the AI assistant to:
 
@@ -87,18 +93,18 @@ This MCP server exposes the following tools to the connected AI assistant:
     *   `server_id` (string, **required**): A unique identifier for the server configuration entry (the MCPFinder ID obtained from `search_mcp_servers`).
     *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`. Use this for standard client installations.
     *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file (e.g., `/path/to/custom/mcp.json` or `~/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients.
-    *   `mcp_definition` (object, optional): Defines the server configuration.
-        *   `command` (string, optional): Command - e.g., `"npx"` (default)
-        *   `args` (array of strings, optional): Arguments - e.g., `["-y", "my-mcp-package"]`). If omitted, defaults are fetched from the registry (if possible, typically `["-y", "@repo/package-name"]`). If provided without `command` but with `env` or `workingDirectory`, the default command is fetched and merged with the provided `env`/`workingDirectory`.
+    *   `mcp_definition` (object, optional): Defines the server configuration. If omitted, or if certain fields are missing, defaults will be fetched from the MCP Finder Registry based on the `server_id`.
+        *   `command` (array of strings, optional): The command and its arguments (e.g., `["npx", "-y", "my-mcp-package"]`). If omitted, or if only `env`/`workingDirectory` are provided below, the default command is fetched from the registry.
         *   `env` (object, optional): Environment variables (e.g., `{"API_KEY": "YOUR_KEY"}`). Merged with defaults if `command` is omitted.
         *   `workingDirectory` (string, optional): The working directory for the server process. Merged with defaults if `command` is omitted.
 *   **Output:** A success or error message.
+*   **Note:** The key used to store this server's configuration within the JSON file (under `mcpServers` or `servers`) is automatically generated based on the server's registered URL (obtained via the `server_id`). The provided `server_id` is used as a fallback if a suitable key cannot be derived from the URL. The tool automatically detects whether to use `mcpServers` or `servers` as the top-level key based on the existing file structure, defaulting to `mcpServers`.
 
 ### 4. `remove_mcp_server_config`
 
-*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. You must provide *either* `client_type` OR `config_file_path`.
+*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. You must provide *either* `client_type` OR `config_file_path`. The `server_id` provided must match the configuration key name used when the server was added (which is typically derived from the server's URL, see `add_mcp_server_config` note).
 *   **Input Schema:**
-    *   `server_id` (string, **required**): The unique identifier of the server configuration entry to remove (config key name).
+    *   `server_id` (string, **required**): The unique identifier (configuration key name) of the server configuration entry to remove.
     *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`.
     *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file. Mutually exclusive with `client_type`.
 *   **Output:** A success or error message indicating whether the entry was found and removed.
@@ -114,3 +120,5 @@ For contributions, please contact: mcpfinder(dot}dev[at}domainsbyproxy{dot]com
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+It means you're free to use (including commercially), modify, and share it. However, if you run a modified version, you're also required to publicly share your version.
