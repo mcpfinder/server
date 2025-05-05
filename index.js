@@ -491,6 +491,7 @@ function createServerInstance(apiUrl) {
   globalApiUrl = apiUrl;
   return new Server({
     name: 'mcpfinder',
+    version: '1.0.0',
     description: 'Provides tools to search the MCP Finder registry and manage local MCP client configurations.',
     tools: allTools, // Use the defined array
   }, {
@@ -559,8 +560,8 @@ async function startStdioServer(apiUrl) {
     const transport = new StdioServerTransport();
 
     transport.onclose = () => {
-        console.error("Stdio transport closed.");
-        process.exit(0);
+        console.error("Stdio transport closed. Server process will remain alive.");
+        // process.exit(0); // Keep process alive even if transport closes
     };
 
     try {
@@ -568,6 +569,8 @@ async function startStdioServer(apiUrl) {
         console.error("🚀 MCP Finder Server (Stdio) connected and ready.");
         console.error(`   Using API: ${globalApiUrl}`);
         console.error("   Waiting for MCP requests via stdin...");
+        // Keep the process alive indefinitely in stdio mode
+        setInterval(() => {}, 1 << 30); // Use a very large interval
     } catch (error) {
         console.error("!!! Failed to connect server to stdio transport:", error);
         process.exit(1);
