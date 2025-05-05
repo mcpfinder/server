@@ -8,7 +8,6 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import fetch from 'node-fetch';
-import { randomUUID } from 'node:crypto';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -20,8 +19,11 @@ const DEFAULT_API_URL = 'https://mcpfinder.dev';
 
 // --- Global state for server/transport ---
 let runningHttpServer = null;
-let httpTransportInstance = null; // Store the single HTTP transport instance
-let serverInstance = null; // To hold the core Server instance
+let httpTransportInstance = null;
+let serverInstance = null;
+
+// Store API URL globally for tool implementations
+let globalApiUrl = DEFAULT_API_URL;
 
 // --- Help Text ---
 const helpText = `
@@ -33,16 +35,10 @@ Communicates with the MCP Finder Registry API (https://mcpfinder.dev/api).
 Usage: node index.js [options]
 
 Options:
-  --http            Run the server in HTTP mode.
-                    NOTE: This mode may have compatibility issues with clients like
-                    Cursor/Claude Desktop expecting Stdio. Primarily for direct
-                    testing (e.g., with mcp-cli) or specific use cases.
-                    Default is Stdio mode (recommended for Cursor/Claude).
-  --port <number>   Port for HTTP mode (overrides MCP_PORT env var).
-                    Default: ${DEFAULT_PORT}
-  --api-url <url>   URL of the MCP Finder Registry API 
-                    (overrides MCPFINDER_API_URL env var).
-                    Default: ${DEFAULT_API_URL}
+  --setup           Run the interactive setup to configure a client.
+  --http            Run the server in HTTP mode. Default is Stdio mode.
+  --port <number>   Port for HTTP mode (overrides MCP_PORT env var). Default: ${DEFAULT_PORT}
+  --api-url <url>   URL of the MCP Finder Registry API (overrides MCPFINDER_API_URL env var). Default: ${DEFAULT_API_URL}
   --help            Display this help message.
 
 Environment Variables:
@@ -54,6 +50,7 @@ Environment Variables:
 const args = process.argv.slice(2);
 const runHttp = args.includes('--http');
 const showHelp = args.includes('--help');
+const runSetupFlag = args.includes('--setup');
 
 function getArgValue(argName) {
     const index = args.indexOf(argName);
@@ -66,28 +63,6 @@ function getArgValue(argName) {
 const cliPort = getArgValue('--port');
 const cliApiUrl = getArgValue('--api-url');
 
-if (showHelp) {
-  console.log(helpText);
-  process.exit(0);
-}
-
-// --- Determine Final Configuration ---
-const PORT = cliPort ? parseInt(cliPort, 10) : (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : DEFAULT_PORT);
-const MCPFINDER_API_URL = cliApiUrl || process.env.MCPFINDER_API_URL || DEFAULT_API_URL;
-
-// Validate Port
-if (isNaN(PORT) || PORT <= 0 || PORT > 65535) {
-    console.error(`Invalid port number specified: ${cliPort || process.env.MCP_PORT}. Using default ${DEFAULT_PORT}.`);
-    PORT = DEFAULT_PORT; // Fallback to default if parsing failed or value is invalid
-}
-
-console.error(`Using MCP Finder API URL: ${MCPFINDER_API_URL}`);
-if (runHttp) {
-    console.error(`Running in HTTP mode on port ${PORT}`);
-} else {
-    console.error("Running in Stdio mode");
-}
-
 // --- Tool Schemas (Zod for internal validation) ---
 const SearchServersInput = z.object({
   query: z.string().optional().describe("Keywords to search for in tool name or description."),
@@ -95,34 +70,30 @@ const SearchServersInput = z.object({
 });
 
 const GetServerDetailsInput = z.object({
-  id: z.string().min(1).describe("The unique ID of the MCP server."), // Use min(1) to ensure non-empty
+  id: z.string().min(1).describe("The unique ID of the MCP server."),
 });
 
-// Allow any string for client type, or an absolute path
+// Union schema to ensure either client_type or config_file_path is provided, but not both.
 const ClientIdentifierSchema = z.union([
   z.object({
     client_type: z.string().describe("The type or name of the client application (e.g., 'cursor', 'claude', 'windsurf')."),
-    config_file_path: z.undefined(), // Must be undefined if client_type is used
+    config_file_path: z.undefined(),
   }),
   z.object({
-    client_type: z.undefined(), // Must be undefined if config_file_path is used
-    config_file_path: z.string().describe("Absolute path to the MCP JSON configuration file. Use this for custom clients or non-standard locations. Path should include spaces literally, no shell escaping needed."),
+    client_type: z.undefined(),
+    config_file_path: z.string().describe("Absolute path or path starting with '~' to the MCP JSON configuration file."),
   })
 ], {
-  // Custom error message for the union
   errorMap: (issue, ctx) => {
     if (issue.code === z.ZodIssueCode.invalid_union) {
-        // Check if the input had *both* properties defined, which is a common error case here
         if (ctx.data?.client_type !== undefined && ctx.data?.config_file_path !== undefined) {
             return { message: "Invalid input: Provide either 'client_type' OR 'config_file_path', but not both." };
         }
-        // Default union error for other cases (e.g., neither provided)
         return { message: "Invalid input: Provide either 'client_type' OR 'config_file_path'." };
     }
-    // Fallback to default error reporting for other issue types
     return { message: ctx.defaultError };
   }
-}).describe("Specify the target configuration either by client_type (for known clients) or an absolute config_file_path.");
+}).describe("Specify the target configuration either by client_type (for known clients) or config_file_path.");
 
 const AddServerConfigInput = z.object({
   server_id: z.string().describe("A unique identifier for the server configuration entry."),
@@ -130,63 +101,55 @@ const AddServerConfigInput = z.object({
     command: z.array(z.string()).optional().describe("The command and arguments to run the server. If omitted when env/workingDir provided, defaults will be fetched."),
     env: z.record(z.string()).optional().describe("Environment variables required by the server."),
     workingDirectory: z.string().optional().describe("The working directory for the server."),
-  }).describe("The MCP server definition object. If omitted, defaults are fetched. If provided without 'command', defaults are merged.").optional(),
-}).and(ClientIdentifierSchema); // Combine with the client identifier union
+  }).describe("The MCP server definition object. Optional.").optional(),
+}).and(ClientIdentifierSchema);
 
 const RemoveServerConfigInput = z.object({
   server_id: z.string().describe("The unique identifier of the server configuration entry to remove."),
-}).and(ClientIdentifierSchema); // Combine with the client identifier union
+}).and(ClientIdentifierSchema);
 
 // --- Tool Implementations ---
 
 async function search_mcp_servers(input) {
-  console.error('[search_mcp_servers] Received input:', input);
-  const searchUrl = new URL(`${MCPFINDER_API_URL}/api/v1/search`);
+  // Use globalApiUrl
+  const searchUrl = new URL(`${globalApiUrl}/api/v1/search`);
   if (input.query) {
     searchUrl.searchParams.append('q', input.query);
   }
   if (input.tag) {
     searchUrl.searchParams.append('tag', input.tag);
   }
-  console.error(`[search_mcp_servers] Fetching URL: ${searchUrl.toString()}`);
+  console.error(`[search_mcp_servers] Fetching: ${searchUrl.toString()}`);
   try {
     const response = await fetch(searchUrl.toString());
-    console.error(`[search_mcp_servers] Received status: ${response.status}`);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[search_mcp_servers] API request failed with status ${response.status}: ${errorText}`);
+      console.error(`[search_mcp_servers] API Error (${response.status}): ${errorText}`);
       throw new Error(`Failed to fetch from MCP Finder API: ${response.statusText}`);
     }
-    const data = await response.json(); 
-    console.error('[search_mcp_servers] Parsed data:', data);
+    const data = await response.json();
     const formattedContent = data.map(server => ({
       type: 'text',
-      text: `ID: ${server.id}\nName: ${server.name}\nDescription: ${server.description}\nURL: ${server.url}\nTags: ${server.tags.join(', ')}`
+      text: `ID: ${server.id}\\nName: ${server.name}\\nDescription: ${server.description}\\nURL: ${server.url}\\nTags: ${server.tags.join(', ')}`
     }));
-    
-    // Add instruction for LLM
-    const instructionBlock = { 
-      type: 'text', 
-      text: "Use the 'add_mcp_server_config' tool with one of the listed server IDs to add it to the client's configuration." 
+
+    const instructionBlock = {
+      type: 'text',
+      text: "Use the 'add_mcp_server_config' tool with one of the listed server IDs to add it to the client's configuration."
     };
 
-    console.error('[search_mcp_servers] Returning formatted text content blocks and instruction:', { content: [...formattedContent, instructionBlock] });
-    return { content: [...formattedContent, instructionBlock] }; 
+    return { content: [...formattedContent, instructionBlock] };
 
   } catch (error) {
-    console.error('[search_mcp_servers] Error during fetch or processing:', error);
+    console.error('[search_mcp_servers] Error:', error);
     return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
   }
 }
 
 async function get_mcp_server_details(input) {
-  console.error('[get_mcp_server_details] Function called. Received input:', input);
-
-  // Validation will happen in the callToolHandler 
-
-  console.error('Getting details for MCP server:', input.id);
-  const url = `${MCPFINDER_API_URL}/api/v1/tools/${input.id}`;
-  console.error(`Fetching from: ${url}`);
+  // Use globalApiUrl
+  const url = `${globalApiUrl}/api/v1/tools/${input.id}`;
+  console.error(`[get_mcp_server_details] Fetching: ${url}`);
 
   try {
     const response = await fetch(url);
@@ -195,7 +158,7 @@ async function get_mcp_server_details(input) {
             throw new Error(`Server with ID ${input.id} not found.`);
         }
         const errorText = await response.text();
-        console.error(`API Error getting details (${response.status}): ${errorText}`);
+        console.error(`[get_mcp_server_details] API Error (${response.status}): ${errorText}`);
         throw new Error(`Failed to get MCP server details: ${response.statusText}`);
     }
     const manifest = await response.json();
@@ -203,73 +166,63 @@ async function get_mcp_server_details(input) {
         command: [], env: {}, workingDirectory: undefined,
     };
     let hintConstructionError = null;
+    // Attempt to generate installation hints
     try {
         if (manifest.url && !manifest.url.startsWith('http') && manifest.url.includes('/')) {
              installationDetails.command = ['npx', '-y', manifest.url];
-        } else if (manifest.url && manifest.url.startsWith('http')) {
-             console.warn(`[get_mcp_server_details] Cannot reliably determine command for URL-based server: ${manifest.url}`);
         }
         if (manifest.auth && manifest.auth.type === 'api-key') {
             const envVarName = `${manifest.name.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}_API_KEY`;
-            installationDetails.env[envVarName] = `YOUR_${envVarName}`; 
-             console.error(`[get_mcp_server_details] Detected API key auth. Suggesting env var: ${envVarName}`);
+            installationDetails.env[envVarName] = `YOUR_${envVarName}`;
         }
     } catch (e) {
-        console.error("[get_mcp_server_details] Error constructing installation details hint from manifest:", e);
+        console.error("[get_mcp_server_details] Error constructing installation hint:", e);
         hintConstructionError = `Failed to generate installation hint: ${e.message}`;
-        installationDetails = { command: [], env: {}, workingDirectory: undefined };
+        installationDetails = { command: [], env: {}, workingDirectory: undefined }; // Reset on error
     }
     const details = { ...manifest, installation: installationDetails };
     const detailsBlock = { type: 'text', text: JSON.stringify(details, null, 2) };
-    
-    // Add instruction for LLM
-    const instructionBlock = { 
-      type: 'text', 
-      text: `You can use the 'add_mcp_server_config' tool with server_id '${input.id}' to add this server to the client's configuration. Optionally provide command/env/workingDirectory, or let the tool fetch defaults.` 
+
+    const instructionBlock = {
+      type: 'text',
+      text: `You can use the 'add_mcp_server_config' tool with server_id '${input.id}' to add this server. Optionally provide command/env/workingDirectory.`
     };
 
-    const errorBlock = hintConstructionError 
-        ? { type: 'text', text: `Warning: ${hintConstructionError}` } 
+    const errorBlock = hintConstructionError
+        ? { type: 'text', text: `Warning: ${hintConstructionError}` }
         : null;
 
-    return { 
+    return {
       content: [detailsBlock, instructionBlock, errorBlock].filter(Boolean)
-    }; 
+    };
 
   } catch (error) {
-      console.error('Error fetching tool details:', error);
-      return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true }; 
+      console.error('[get_mcp_server_details] Error:', error);
+      return { content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true };
   }
 }
 
 // --- File Utils ---
 
-// Shared function to resolve config path based on client type or direct path
 async function resolveAndValidateConfigPath(client_type, config_file_path) {
   let resolvedPath;
   if (config_file_path) {
-    // Handle direct path, potentially resolving ~
-    console.error(`[resolveAndValidateConfigPath] Using provided config file path: ${config_file_path}`);
     let rawPath = config_file_path;
-
-    // Resolve ~ to home directory
     if (rawPath.startsWith('~')) {
       rawPath = path.join(os.homedir(), rawPath.slice(1));
-      console.error(`[resolveAndValidateConfigPath] Resolved '~' to: ${rawPath}`);
     }
-
-    // Validate that the final path is absolute
     if (!path.isAbsolute(rawPath)) {
       throw new Error(`Provided 'config_file_path' must be absolute or start with '~': ${config_file_path}`);
     }
     resolvedPath = rawPath;
+    console.error(`[resolveAndValidateConfigPath] Using resolved path: ${resolvedPath}`);
   } else if (client_type) {
-    console.error(`[resolveAndValidateConfigPath] Resolving config path for client type: ${client_type}`);
-    resolvedPath = await getConfigPath(client_type); // getConfigPath already ensures absolute or throws
+    resolvedPath = await getConfigPath(client_type);
+    console.error(`[resolveAndValidateConfigPath] Resolved path for client '${client_type}': ${resolvedPath}`);
   } else {
-    throw new Error("Invalid state: Neither 'client_type' nor 'config_file_path' was provided for path resolution.");
+    // Should be caught by Zod schema, but safeguard anyway
+    throw new Error("Invalid state: Neither 'client_type' nor 'config_file_path' was provided.");
   }
-  console.error(`[resolveAndValidateConfigPath] Final resolved path: ${resolvedPath}`);
   return resolvedPath;
 }
 
@@ -283,152 +236,136 @@ async function getConfigPath(clientType) {
                  return path.join(homeDir, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
             } else if (process.platform === 'win32') {
                  return path.join(process.env.APPDATA, 'Claude', 'claude_desktop_config.json');
-            } else {
+            } else { // Linux/Other
                 return path.join(homeDir, '.config', 'Claude', 'claude_desktop_config.json');
             }
         case 'windsurf':
-            return path.join(homeDir, '.codeium', 'windsurf', 'mcp_config.json');
+             return path.join(homeDir, '.codeium', 'windsurf', 'mcp_config.json');
         default:
-            // For unknown client types, require an absolute path via config_file_path
-            throw new Error(`Unsupported client type for automatic path resolution: '${clientType}'. Please provide an absolute 'config_file_path' instead.`);
+            throw new Error(`Unsupported client type for automatic path resolution: '${clientType}'. Please provide 'config_file_path'.`);
     }
 }
 
-// Returns default {} if file not found, throws specific error for bad JSON/read errors.
-async function readConfigFile(filePath) { 
+// Returns default { mcpServers: {} } if file not found, throws for other errors.
+async function readConfigFile(filePath) {
     try {
         const data = await fs.readFile(filePath, 'utf-8');
         try {
             return JSON.parse(data);
         } catch (parseError) {
-            console.error(`Error parsing JSON from config file ${filePath}:`, parseError);
-            throw new Error(`Failed to parse JSON configuration file: ${filePath}. Invalid content.`);
+            console.error(`[readConfigFile] Error parsing JSON from ${filePath}:`, parseError);
+            throw new Error(`Failed to parse JSON configuration file: ${filePath}.`);
         }
     } catch (error) {
         if (error.code === 'ENOENT') {
-             // If file doesn't exist, treat it as empty config.
-             console.warn(`Config file not found at ${filePath}, returning default structure.`);
+             console.warn(`[readConfigFile] Config file not found at ${filePath}, treating as empty.`);
              return { mcpServers: {} };
         }
-        // For other errors (e.g., permissions), re-throw
-        console.error(`Error reading config file ${filePath}:`, error);
-        throw new Error(`Failed to read config file: ${error.message}`); 
+        console.error(`[readConfigFile] Error reading ${filePath}:`, error);
+        throw new Error(`Failed to read config file: ${error.message}`);
     }
 }
 
 async function writeConfigFile(filePath, config) {
     try {
         const dir = path.dirname(filePath);
-        await fs.mkdir(dir, { recursive: true }); 
+        await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(filePath, JSON.stringify(config, null, 2), 'utf-8');
-        console.error(`Successfully wrote config to ${filePath}`);
+        console.error(`[writeConfigFile] Successfully wrote config to ${filePath}`);
     } catch (error) {
-        console.error(`Error writing config file ${filePath}:`, error);
+        console.error(`[writeConfigFile] Error writing to ${filePath}:`, error);
         throw new Error(`Failed to write config file: ${error.message}`);
     }
 }
 
 async function add_mcp_server_config(input) {
-  console.error('[add_mcp_server_config] Function called. Received input:', JSON.stringify(input));
+  // Use globalApiUrl for fetching defaults
+  const { server_id, client_type, config_file_path, mcp_definition } = input;
 
-  const { server_id, mcp_definition, client_type, config_file_path } = input;
-  let finalMcpDefinition = {};
-  let configPath;
+  let resolvedPath;
+  try {
+      resolvedPath = await resolveAndValidateConfigPath(client_type, config_file_path);
+      if (!resolvedPath) throw new Error('Failed to determine config file path.'); // Should not happen if resolve func works
+  } catch (error) {
+      console.error(`[add_mcp_server_config] Error resolving path: ${error.message}`);
+      return { content: [{ type: 'text', text: `Error resolving config path: ${error.message}` }], isError: true };
+  }
+
+  let finalDefinition = mcp_definition || {};
+
+  // If definition is missing, or command is missing, fetch defaults from the API.
+  if (!finalDefinition.command || finalDefinition.command.length === 0) {
+    console.error(`[add_mcp_server_config] Fetching default definition/command for ${server_id}.`);
+    const detailsUrl = `${globalApiUrl}/api/v1/tools/${server_id}`;
+    try {
+      const response = await fetch(detailsUrl);
+      if (!response.ok) throw new Error(`API error (${response.status}) fetching details for ${server_id}`);
+      const manifest = await response.json();
+
+      let defaultCommand = [];
+      if (manifest.url && !manifest.url.startsWith('http') && manifest.url.includes('/')) {
+        defaultCommand = ['npx', '-y', manifest.url];
+      } else {
+         console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest.`);
+      }
+
+      // Merge fetched command with potentially provided env/workingDir
+      // Prioritize provided values over fetched defaults if definition exists
+      finalDefinition = {
+        command: defaultCommand,
+        env: mcp_definition?.env ?? (manifest?.installation?.env ?? {}),
+        workingDirectory: mcp_definition?.workingDirectory ?? manifest?.installation?.workingDirectory
+      };
+      console.error(`[add_mcp_server_config] Using merged/default definition.`);
+
+    } catch (fetchError) {
+      console.error(`[add_mcp_server_config] Failed to fetch default definition for ${server_id}:`, fetchError);
+      return { content: [{ type: 'text', text: `Error: Failed to fetch default configuration for server ${server_id}. ${fetchError.message}` }], isError: true };
+    }
+  }
+
+  // If command is still missing after attempting fetch, return error
+  if (!finalDefinition.command || finalDefinition.command.length === 0) {
+      console.error(`[add_mcp_server_config] Command is still missing for ${server_id}.`);
+      return { content: [{ type: 'text', text: `Error: Could not determine command for server ${server_id}. Provide in 'mcp_definition'.` }], isError: true };
+  }
 
   try {
-    // --- Step 1: Determine the final MCP Definition (fetch defaults if needed) ---
-    if (mcp_definition) {
-      // If definition is provided, use it (potentially merging later)
-      finalMcpDefinition = { ...mcp_definition };
-      console.error('[add_mcp_server_config] MCP definition provided by user:', finalMcpDefinition);
+    const config = await readConfigFile(resolvedPath);
 
-      // If command is missing, fetch defaults and merge
-      if (!finalMcpDefinition.command || finalMcpDefinition.command.length === 0) {
-        console.error(`[add_mcp_server_config] Command missing in provided definition for ${server_id}. Fetching defaults...`);
-        const detailsUrl = `${MCPFINDER_API_URL}/api/v1/tools/${server_id}`;
-        const detailsResponse = await fetch(detailsUrl);
-        if (!detailsResponse.ok) {
-          throw new Error(`Failed to fetch default details for server ${server_id}: ${detailsResponse.statusText}`);
-        }
-        const detailsData = await detailsResponse.json();
-        // Prefer fetched command/args if available in manifest's installation hint
-        const fetchedCommand = detailsData?.installation?.command;
-        if (fetchedCommand && fetchedCommand.length > 0) {
-            finalMcpDefinition.command = fetchedCommand;
-            console.error(`[add_mcp_server_config] Merged default command: ${fetchedCommand.join(' ')}`);
-        } else {
-            console.warn(`[add_mcp_server_config] No default command found in fetched details for ${server_id}. Definition might be incomplete.`);
-        }
-        // Merge env vars and working dir if not provided by user
-        finalMcpDefinition.env = { ...(detailsData?.installation?.env || {}), ...(finalMcpDefinition.env || {}) };
-        finalMcpDefinition.workingDirectory = finalMcpDefinition.workingDirectory || detailsData?.installation?.workingDirectory;
-        console.error(`[add_mcp_server_config] Merged env/workingDir with defaults. Final env:`, finalMcpDefinition.env);
-        console.error(`[add_mcp_server_config] Merged env/workingDir with defaults. Final workingDir:`, finalMcpDefinition.workingDirectory);
-      }
-    } else {
-      // If no definition provided, fetch defaults completely
-      console.error(`[add_mcp_server_config] No MCP definition provided for ${server_id}. Fetching defaults...`);
-      const detailsUrl = `${MCPFINDER_API_URL}/api/v1/tools/${server_id}`;
-      const detailsResponse = await fetch(detailsUrl);
-      if (!detailsResponse.ok) {
-        throw new Error(`Failed to fetch default details for server ${server_id}: ${detailsResponse.statusText}`);
-      }
-      const detailsData = await detailsResponse.json();
-      finalMcpDefinition = detailsData?.installation || { command: [], env: {}, workingDirectory: undefined };
-      console.error('[add_mcp_server_config] Using fetched default definition:', finalMcpDefinition);
-       if (!finalMcpDefinition.command || finalMcpDefinition.command.length === 0) {
-            console.warn(`[add_mcp_server_config] No command found in fetched default details for ${server_id}. Definition might be incomplete.`);
-       }
-    }
-
-    // --- Step 2: Resolve and Validate Configuration Path ---
-    // Moved path resolution after definition determination to avoid unnecessary work if fetch fails
-    configPath = await resolveAndValidateConfigPath(client_type, config_file_path);
-
-    // --- Step 3: Read Existing Config ---
-    console.error(`[add_mcp_server_config] Reading config file: ${configPath}`);
-    const config = await readConfigFile(configPath);
-
-    // --- Step 4: Prepare and Format the Server Entry ---
-    // Determine which key to use for server entries: prefer 'mcpServers', else 'servers', default to 'mcpServers'
+    // Determine which key to use for server entries: prefer 'mcpServers', else 'servers'
     const serversKey = config.hasOwnProperty('mcpServers')
         ? 'mcpServers'
-        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
+        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers'); // Default to mcpServers if neither exists
     if (!config[serversKey]) {
         config[serversKey] = {};
     }
 
-    const originalCommandArray = finalMcpDefinition.command; // Assuming it's an array initially
+    const originalCommandArray = finalDefinition.command; // Assuming it's an array initially
 
-    // Always format command into command string + args array
+    // Format command based on client type for compatibility
     console.warn(`[add_mcp_server_config] Applying standard command/args formatting.`);
     if (Array.isArray(originalCommandArray) && originalCommandArray.length > 0) {
-        finalMcpDefinition.command = originalCommandArray[0];
-        finalMcpDefinition.args = originalCommandArray.slice(1); // Rest are args
-        console.warn(`[add_mcp_server_config] Formatted command: "${finalMcpDefinition.command}", args: ${JSON.stringify(finalMcpDefinition.args)}`);
+        finalDefinition.command = originalCommandArray[0]; // Default to command string
+        finalDefinition.args = originalCommandArray.slice(1); // Default to args array
+        console.warn(`[add_mcp_server_config] Formatted command: "${finalDefinition.command}", args: ${JSON.stringify(finalDefinition.args)}`);
     } else {
+        // If source wasn't a valid array, ensure args is not present
+        finalDefinition.command = originalCommandArray; // Preserve original structure
+        delete finalDefinition.args;
         console.error(`[add_mcp_server_config] Original command was not a non-empty array:`, originalCommandArray);
-        // Keep potentially invalid structure if source wasn't a valid array.
-        // Fallback: Preserve original invalid structure as command/args split is not possible.
-        finalMcpDefinition.command = originalCommandArray;
-        delete finalMcpDefinition.args; // Ensure args is not present if format is wrong
     }
 
     // Add or update the server entry
-    config[serversKey][server_id] = finalMcpDefinition;
-    console.error(`[add_mcp_server_config] Updated config object:`, JSON.stringify(config, null, 2)); 
+    config[serversKey][server_id] = finalDefinition;
 
-    console.error(`[add_mcp_server_config] Writing updated config to: ${configPath}`);
-    await writeConfigFile(configPath, config);
+    await writeConfigFile(resolvedPath, config);
 
-    let successMessage = `Successfully added/updated server configuration for '${server_id}' in ${configPath}.`;
-
-    // Add restart note for Claude or custom paths
+    let successMessage = `Successfully added/updated server '${server_id}' in ${resolvedPath}.`;
     if (client_type === 'claude' || config_file_path) {
-      successMessage += ' You may need to restart the client application for the new server to be available.';
+      successMessage += ' Restart client application for changes to take effect.';
     }
 
-    console.error(`[add_mcp_server_config] ${successMessage}`);
     return { content: [{ type: 'text', text: successMessage }] };
 
   } catch (error) {
@@ -438,37 +375,32 @@ async function add_mcp_server_config(input) {
 }
 
 async function remove_mcp_server_config(input) {
-  console.error('[remove_mcp_server_config] Function called. Received input:', JSON.stringify(input));
-
   const { server_id, client_type, config_file_path } = input;
   let configPath;
 
   try {
-    // Resolve and validate path first using the shared function
     configPath = await resolveAndValidateConfigPath(client_type, config_file_path);
 
-    console.error(`[remove_mcp_server_config] Reading config file: ${configPath}`);
-    // Read config file (will return {} if not found)
     const config = await readConfigFile(configPath);
 
-    // Determine which key to use for server entries: prefer 'mcpServers', else 'servers', default to 'mcpServers'
+    // Determine which key to use for server entries
     const serversKey = config.hasOwnProperty('mcpServers')
         ? 'mcpServers'
         : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
     let removed = false;
-    if (config[serversKey] && config[serversKey][server_id]) {
-      console.error(`[remove_mcp_server_config] Found server entry for '${server_id}' in key '${serversKey}'. Removing...`);
+    if (config[serversKey]?.[server_id]) { // Check existence safely
+      console.error(`[remove_mcp_server_config] Removing server '${server_id}' from key '${serversKey}' in ${configPath}...`);
       delete config[serversKey][server_id];
       removed = true;
-      console.error(`[remove_mcp_server_config] Writing updated config to: ${configPath}`);
       await writeConfigFile(configPath, config);
     } else {
-      console.warn(`[remove_mcp_server_config] Server configuration for '${server_id}' not found in ${configPath}. No changes made.`);
+      console.warn(`[remove_mcp_server_config] Server '${server_id}' not found in ${configPath}. No changes needed.`);
     }
 
-    const successMessage = removed ? `Successfully removed server configuration for '${server_id}' from ${configPath}.` : `Server configuration for '${server_id}' not found in ${configPath}.`;
-    console.error(`[remove_mcp_server_config] ${successMessage}`);
-    return { content: [{ type: 'text', text: successMessage }] };
+    const resultMessage = removed
+        ? `Successfully removed server '${server_id}' from ${configPath}.`
+        : `Server '${server_id}' not found in ${configPath}.`;
+    return { content: [{ type: 'text', text: resultMessage }] };
 
   } catch (error) {
     console.error('[remove_mcp_server_config] Error:', error);
@@ -509,8 +441,8 @@ const AddMcpServerConfigTool = {
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." }, // Optional in schema
-      config_file_path: { type: "string", description: "Absolute path to the config file (include spaces literally, no shell escaping). Mutually exclusive with client_type." }, // Optional in schema
+      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." },
+      config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "A unique identifier for the server configuration entry." },
       mcp_definition: {
         type: "object",
@@ -532,15 +464,14 @@ const RemoveMcpServerConfigTool = {
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." }, // Optional in schema
-      config_file_path: { type: "string", description: "Absolute path to the config file (include spaces literally, no shell escaping). Mutually exclusive with client_type." }, // Optional in schema
+      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." },
+      config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "The unique identifier of the server configuration entry to remove." }
     },
     required: ["server_id"]
   }
 };
 
-// Array of all defined tools
 const allTools = [
   SearchMcpServersTool,
   GetMcpServerDetailsTool,
@@ -548,7 +479,6 @@ const allTools = [
   RemoveMcpServerConfigTool,
 ];
 
-// Map tool names to their implementations
 const toolImplementations = {
   search_mcp_servers: search_mcp_servers,
   get_mcp_server_details: get_mcp_server_details,
@@ -557,21 +487,22 @@ const toolImplementations = {
 };
 
 // --- MCP Server Instance Creation (Common) ---
-function createServerInstance() {
-    return new Server({
-        name: 'mcpfinder-server',
-        version: '0.1.0',
-    }, {
-        capabilities: {
-            tools: {}
-        },
-        debug: true,
-    });
+function createServerInstance(apiUrl) {
+  globalApiUrl = apiUrl;
+  return new Server({
+    name: 'mcpfinder',
+    description: 'Provides tools to search the MCP Finder registry and manage local MCP client configurations.',
+    tools: allTools, // Use the defined array
+  }, {
+    capabilities: {
+      tools: {}
+    }
+  });
 }
 
 // --- Request Handlers Setup (Common) ---
 function setupRequestHandlers(server) {
-    // Store Zod schemas for internal validation
+    // Zod schemas for validation
     const toolSchemas = {
       search_mcp_servers: SearchServersInput,
       get_mcp_server_details: GetServerDetailsInput,
@@ -579,7 +510,7 @@ function setupRequestHandlers(server) {
       remove_mcp_server_config: RemoveServerConfigInput,
     };
 
-    // Store handlers
+    // Handlers map
     const toolHandlers = {
       search_mcp_servers,
       get_mcp_server_details,
@@ -588,12 +519,11 @@ function setupRequestHandlers(server) {
     };
 
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-      console.error('Received ListToolsRequest', request);
       return { tools: allTools };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      console.error('Received CallToolRequest', request);
+      console.error('Received CallToolRequest:', request.params.name); 
       const name = request.params.name;
       const toolArgs = request.params.arguments;
       const toolImplementation = toolHandlers[name];
@@ -601,61 +531,43 @@ function setupRequestHandlers(server) {
 
       if (!toolImplementation || !zodSchema) {
         console.error(`Tool implementation or Zod schema not found for: ${name}`);
-        return {
-          content: [{ type: 'text', text: `Unknown tool or missing schema: ${name}` }],
-          isError: true
-        };
+        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
       }
 
-      console.error('Received tool arguments:', toolArgs);
       const parsedArgs = zodSchema.safeParse(toolArgs);
       if (!parsedArgs.success) {
         console.error(`Invalid arguments for tool ${name}:`, parsedArgs.error.errors);
-        return {
-          content: [{ type: 'text', text: `Invalid arguments: ${parsedArgs.error.message}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Invalid arguments: ${parsedArgs.error.message}` }], isError: true };
       }
 
       try {
         const result = await toolImplementation(parsedArgs.data);
-        console.error(`[CallToolRequestSchema] Raw result for tool ${name}:`, result);
         return result;
       } catch (error) {
         console.error(`Error executing tool ${name}:`, error);
-        return {
-          content: [{ type: 'text', text: `Error executing tool ${name}: ${error instanceof Error ? error.message : String(error)}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text', text: `Error executing tool ${name}: ${error.message}` }], isError: true };
       }
     });
 }
 
 // --- Stdio Mode Start Function ---
-async function startStdioServer() {
+async function startStdioServer(apiUrl) {
     console.error("Initializing MCP Finder Server in Stdio mode...");
-    serverInstance = createServerInstance();
+    serverInstance = createServerInstance(apiUrl);
     setupRequestHandlers(serverInstance);
 
     const transport = new StdioServerTransport();
 
     transport.onclose = () => {
-        console.error("Stdio transport closed. Exiting.");
+        console.error("Stdio transport closed.");
         process.exit(0);
     };
 
     try {
         await serverInstance.connect(transport);
-        console.error("🚀 MCP Finder Server (Stdio Transport) connected and ready.");
+        console.error("🚀 MCP Finder Server (Stdio) connected and ready.");
+        console.error(`   Using API: ${globalApiUrl}`);
         console.error("   Waiting for MCP requests via stdin...");
-        // Log registered tools using the server's internal state
-        console.error('Registered Tools:', Object.keys(toolImplementations)); 
-        console.error();
-        console.error('--- NOTE ---');
-        console.error('This server manages local MCP configurations for clients like Cursor, Claude or Windsurf.');
-        console.error(`Search/Get details tools query the MCP Finder Registry API at ${MCPFINDER_API_URL}`);
-        console.error('------------');
-        console.error();
     } catch (error) {
         console.error("!!! Failed to connect server to stdio transport:", error);
         process.exit(1);
@@ -663,90 +575,66 @@ async function startStdioServer() {
 }
 
 // --- HTTP Mode Start Function ---
-async function startHttpServer() {
+async function startHttpServer(port, apiUrl) {
+  try {
     console.error("Initializing MCP Finder Server in HTTP mode...");
-    serverInstance = createServerInstance();
+    serverInstance = createServerInstance(apiUrl);
     setupRequestHandlers(serverInstance);
-
-    // --- Create the single HTTP transport instance --- 
-    httpTransportInstance = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-    });
-
-    try {
-        await serverInstance.connect(httpTransportInstance);
-        console.error('MCP Server connected to HTTP transport.');
-    } catch (error) {
-        console.error("!!! Failed to connect server to HTTP transport:", error);
-        process.exit(1);
-    }
 
     const app = express();
     app.use(express.json());
 
-    app.all('/mcp', async (req, res) => {
-      try {
-        await httpTransportInstance.handleRequest(req, res, req.body);
-      } catch (error) {
-        console.error(`!!! Error during transport.handleRequest for ${req.method} ${req.originalUrl}:`, error);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'Internal server error processing MCP request via transport' });
-        }
-      }
+    httpTransportInstance = new StreamableHTTPServerTransport({
+        server: serverInstance,
+        endpoint: '/',
     });
 
-    // Start Listening (using determined PORT)
-    console.error("Attempting to start HTTP server...");
-    runningHttpServer = app.listen(PORT, () => {
-      console.error("Server successfully started listening.");
-      console.error(`🚀 MCP Finder Server (HTTP Transport) listening on port ${PORT}`);
-      console.error(`   MCP Endpoint: http://localhost:${PORT}/mcp`);
-      console.error('Registered Tools:', Object.keys(toolImplementations)); 
-      console.error();
+    app.all(httpTransportInstance.endpoint, (req, res) => {
+        httpTransportInstance.handleRequest(req, res);
+    });
+
+    runningHttpServer = app.listen(port, () => {
+      console.error(`🚀 MCP Finder Server (HTTP) listening on port ${port}`);
+      console.error(`   Using API: ${globalApiUrl}`);
     });
 
     runningHttpServer.on('error', (error) => {
-      // Check for specific port-in-use error
       if (error.code === 'EADDRINUSE') {
-        console.error(`\n!!! Failed to start HTTP server: Port ${PORT} is already in use.`);
-        console.error(`    Another application might be running on this port.`);
-        console.error(`    Try stopping the other application or use a different port via the --port option.`);
-        console.error(`    Example: node index.js --http --port ${PORT + 1}\n`);
+        console.error(`!!! Error: Port ${port} is already in use.`);
       } else {
-        console.error("!!! Failed to start HTTP server:", error);
+        console.error("!!! HTTP server error:", error);
       }
       process.exit(1);
     });
 
-    console.error("HTTP server listen command issued. Waiting for server to start...");
+  } catch (error) {
+    console.error("!!! Failed to start HTTP server:", error);
+    process.exit(1);
+  }
 }
 
+// --- Graceful Shutdown Handler ---
 async function shutdown() {
-    console.error();
-    console.error('Received shutdown signal...');
+    console.error('\\nReceived shutdown signal...');
 
     if (runHttp) {
         console.error('Shutting down HTTP server and transport...');
-
         if (httpTransportInstance) {
             try {
-                console.error('Closing HTTP transport...');
                 await httpTransportInstance.close();
-                console.error('HTTP transport closed.');
             } catch (transportError) {
                 console.error('Error closing HTTP transport:', transportError);
             }
         }
-
         if (runningHttpServer) {
-             console.error('Closing HTTP server...');
             runningHttpServer.close((err) => {
                 if (err) {
                     console.error('Error closing HTTP server:', err);
+                    process.exit(1);
                 } else {
                     console.error('HTTP server closed.');
+                    process.exit(0);
                 }
-                process.exit(err ? 1 : 0);
             });
             setTimeout(() => {
                 console.error('HTTP shutdown timeout exceeded, forcing exit.');
@@ -757,6 +645,7 @@ async function shutdown() {
         }
     } else {
         console.error('Exiting MCP server (stdio)...');
+        // Stdio transport relies on process exit or its own onclose handler
         process.exit(0);
     }
 }
@@ -764,9 +653,53 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-// --- Main Execution --- 
-if (runHttp) {
-    startHttpServer();
+// --- Main Execution Logic ---
+
+if (showHelp) {
+  console.log(helpText);
+  process.exit(0);
+}
+
+// Handle --setup flag BEFORE other logic
+if (runSetupFlag) {
+  (async () => {
+    try {
+      console.log("Running interactive setup...");
+      const { runSetup } = await import('./src/setup.js');
+      await runSetup();
+      console.log("Setup completed successfully.");
+      process.exit(0);
+    } catch (error) {
+      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+          console.error("Error: Setup module ('./src/setup.js') not found.");
+      } else {
+          console.error("Setup failed:", error);
+      }
+      process.exit(1);
+    }
+  })();
 } else {
-    startStdioServer();
+  // Proceed with normal server startup only if --setup is not used
+  const finalPort = cliPort ? parseInt(cliPort, 10) : (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : DEFAULT_PORT);
+  let validatedPort = finalPort;
+  const finalApiUrl = cliApiUrl || process.env.MCPFINDER_API_URL || DEFAULT_API_URL;
+
+  // Validate Port
+  if (isNaN(finalPort) || finalPort <= 0 || finalPort > 65535) {
+      console.error(`Invalid port specified: ${cliPort || process.env.MCP_PORT}. Using default ${DEFAULT_PORT}.`);
+      validatedPort = DEFAULT_PORT;
+  }
+
+  (async () => {
+      if (runHttp) {
+          console.error(`Starting HTTP mode on port ${validatedPort}`);
+          await startHttpServer(validatedPort, finalApiUrl);
+      } else {
+          console.error("Starting Stdio mode");
+          await startStdioServer(finalApiUrl);
+      }
+  })().catch(err => {
+      console.error("!!! Unhandled error during server startup:", err);
+      process.exit(1);
+  });
 }

@@ -7,8 +7,16 @@
   "bin": {
     "mcpfinder-server": "./index.js"
   },
+  "files": [
+    "index.js",
+    "src",
+    "mcp_config_paths.json",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublishOnly": "mkdir -p src && cp ../mcpfinder-www/public/mcp_config_paths.json ."
   },
   "keywords": [
     "mcp",
