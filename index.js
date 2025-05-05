@@ -168,7 +168,7 @@ async function get_mcp_server_details(input) {
     let hintConstructionError = null;
     // Attempt to generate installation hints
     try {
-        if (manifest.url && !manifest.url.startsWith('http') && manifest.url.includes('/')) {
+        if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
              installationDetails.command = ['npx', '-y', manifest.url];
         }
         if (manifest.auth && manifest.auth.type === 'api-key') {
@@ -303,7 +303,8 @@ async function add_mcp_server_config(input) {
       const manifest = await response.json();
 
       let defaultCommand = [];
-      if (manifest.url && !manifest.url.startsWith('http') && manifest.url.includes('/')) {
+      // If the URL exists and doesn't look like http:// or https://, assume it's a package name
+      if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
         defaultCommand = ['npx', '-y', manifest.url];
       } else {
          console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
