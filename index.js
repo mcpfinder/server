@@ -306,17 +306,32 @@ async function add_mcp_server_config(input) {
       if (manifest.url && !manifest.url.startsWith('http') && manifest.url.includes('/')) {
         defaultCommand = ['npx', '-y', manifest.url];
       } else {
-         console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest.`);
+         console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
       }
 
-      // Merge fetched command with potentially provided env/workingDir
-      // Prioritize provided values over fetched defaults if definition exists
+      // Determine the command to use: prioritize non-empty manifest command, then URL-based default
+      let commandToUse = defaultCommand; // Start with URL-based default
+      if (manifest?.installation?.command && Array.isArray(manifest.installation.command)) {
+          if (manifest.installation.command.length > 0) {
+               // If API provided a non-empty command, use it instead of the URL-based default
+               commandToUse = manifest.installation.command;
+               console.error(`[add_mcp_server_config] Using command from fetched manifest installation: ${JSON.stringify(commandToUse)}`);
+          } else {
+               // API provided an empty command array, stick with the URL-based default (if any)
+               console.error(`[add_mcp_server_config] Manifest installation command is empty, using URL-based default (if available): ${JSON.stringify(commandToUse)}`);
+          }
+      } else {
+          // Manifest did not provide installation.command, stick with the URL-based default
+          console.error(`[add_mcp_server_config] Manifest installation command missing, using URL-based default (if available): ${JSON.stringify(commandToUse)}`);
+      }
+
+      // Merge command with potentially provided env/workingDir
       finalDefinition = {
-        command: defaultCommand,
+        command: commandToUse, // Use the determined command array
         env: mcp_definition?.env ?? (manifest?.installation?.env ?? {}),
         workingDirectory: mcp_definition?.workingDirectory ?? manifest?.installation?.workingDirectory
       };
-      console.error(`[add_mcp_server_config] Using merged/default definition.`);
+      console.error(`[add_mcp_server_config] Using determined definition: ${JSON.stringify(finalDefinition)}`);
 
     } catch (fetchError) {
       console.error(`[add_mcp_server_config] Failed to fetch default definition for ${server_id}:`, fetchError);
