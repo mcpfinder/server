@@ -334,6 +334,22 @@ async function add_mcp_server_config(input) {
 
   let finalDefinition = mcp_definition || {};
 
+  // Fetch manifest FIRST to get URL for key generation
+  let manifest;
+  try {
+    console.error(`[add_mcp_server_config] Fetching manifest for ${server_id} to generate config key.`);
+    const detailsUrl = `${globalApiUrl}/api/v1/tools/${server_id}`;
+    const response = await fetch(detailsUrl);
+    if (!response.ok) throw new Error(`API error (${response.status}) fetching manifest for ${server_id}`);
+    manifest = await response.json();
+  } catch (fetchError) {
+    console.error(`[add_mcp_server_config] Failed to fetch manifest for ${server_id}:`, fetchError);
+    return { content: [{ type: 'text', text: `Error: Failed to fetch manifest required for configuration key for server ${server_id}. ${fetchError.message}` }], isError: true };
+  }
+
+  // Generate the key to use in the config file using the fetched manifest URL
+  const configKey = generateConfigKey(manifest.url, server_id);
+
   // If definition is missing, or command is missing, fetch defaults from the API.
   if (!finalDefinition.command || finalDefinition.command.length === 0) {
     console.error(`[add_mcp_server_config] Fetching default definition/command for ${server_id}.`);
