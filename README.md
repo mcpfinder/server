@@ -2,9 +2,13 @@
 
 **Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCP Finder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
 
-***"App Store for Agents"***
+***App Store for Agents***
 
 Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCP Finder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
+
+***Plug-and-Play Tools for LLMs***
+
+![Example](example_chat.png)
 
 This Node.js application implements an MCP (Model Context Protocol) server designed to run locally alongside MCP clients (like Cursor, Claude Desktop, Windsurf). It provides tools that allow AI within the client to interact with the MCP ecosystem.
 
