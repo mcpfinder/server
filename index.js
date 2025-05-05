@@ -352,16 +352,9 @@ async function add_mcp_server_config(input) {
 
   // If definition is missing, or command is missing, fetch defaults from the API.
   if (!finalDefinition.command || finalDefinition.command.length === 0) {
-    console.error(`[add_mcp_server_config] Fetching default definition/command for ${server_id}.`);
-    const detailsUrl = `${globalApiUrl}/api/v1/tools/${server_id}`;
+    console.error(`[add_mcp_server_config] User did not provide command, determining from manifest...`);
+    // Fetching is already done above, manifest variable is available
     try {
-      const response = await fetch(detailsUrl);
-      if (!response.ok) throw new Error(`API error (${response.status}) fetching details for ${server_id}`);
-      const manifest = await response.json();
-
-      // Generate the key to use in the config file
-      const configKey = generateConfigKey(manifest.url, server_id);
-
       let defaultCommand = [];
       // If the URL exists and doesn't look like http:// or https://, assume it's a package name
       if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
