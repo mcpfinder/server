@@ -257,27 +257,16 @@ function generateConfigKey(url, fallbackId) {
     }
 
     let key = url.trim();
-
-    // Remove http(s) prefix
     key = key.replace(/^https?:\/\//, '');
-
-    // Convert to lowercase
     key = key.toLowerCase();
-
-    // Replace invalid characters (not a-z, 0-9, _) with a single underscore
     key = key.replace(/[^a-z0-9_]+/g, '_');
-
-    // Remove leading/trailing underscores
     key = key.replace(/^_+|_+$/g, '');
 
-    // Truncate
     if (key.length > MAX_KEY_LENGTH) {
         key = key.substring(0, MAX_KEY_LENGTH);
-        // Ensure it doesn't end with underscore after truncation
         key = key.replace(/_+$/g, '');
     }
 
-    // Final fallback if sanitization resulted in an empty string
     if (key === '') {
         console.warn(`[generateConfigKey] Sanitization resulted in empty key for URL "${url}", using fallback ID: ${fallbackId}`);
         return fallbackId.substring(0, MAX_KEY_LENGTH);
@@ -326,7 +315,7 @@ async function add_mcp_server_config(input) {
   let resolvedPath;
   try {
       resolvedPath = await resolveAndValidateConfigPath(client_type, config_file_path);
-      if (!resolvedPath) throw new Error('Failed to determine config file path.'); // Should not happen if resolve func works
+      if (!resolvedPath) throw new Error('Failed to determine config file path.'); 
   } catch (error) {
       console.error(`[add_mcp_server_config] Error resolving path: ${error.message}`);
       return { content: [{ type: 'text', text: `Error resolving config path: ${error.message}` }], isError: true };
@@ -430,9 +419,9 @@ async function add_mcp_server_config(input) {
 
     await writeConfigFile(resolvedPath, config);
 
-    let successMessage = `Successfully added/updated server '${server_id}' (using key '${configKey}') in ${resolvedPath}.`;
+    let successMessage = `Successfully added/updated server '${server_id}' (using config key name: '${configKey}') in ${resolvedPath}.`;
     if (client_type === 'claude' || config_file_path) {
-      successMessage += ' Restart client application for changes to take effect.';
+      successMessage += ' You may need to restart the client application for changes to take effect.';
     }
 
     return { content: [{ type: 'text', text: successMessage }] };
@@ -450,6 +439,7 @@ async function remove_mcp_server_config(input) {
   try {
     configPath = await resolveAndValidateConfigPath(client_type, config_file_path);
 
+    const keyToRemove = server_id;
     const config = await readConfigFile(configPath);
 
     // Determine which key to use for server entries
@@ -457,18 +447,18 @@ async function remove_mcp_server_config(input) {
         ? 'mcpServers'
         : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
     let removed = false;
-    if (config[serversKey]?.[server_id]) { // Check existence safely
-      console.error(`[remove_mcp_server_config] Removing server '${server_id}' from key '${serversKey}' in ${configPath}...`);
-      delete config[serversKey][server_id];
+    if (config[serversKey]?.[keyToRemove]) { // Check existence safely using the provided ID
+      console.error(`[remove_mcp_server_config] Removing server with name '${keyToRemove}' from key '${serversKey}' in ${configPath}...`);
+      delete config[serversKey][keyToRemove];
       removed = true;
       await writeConfigFile(configPath, config);
     } else {
-      console.warn(`[remove_mcp_server_config] Server '${server_id}' not found in ${configPath}. No changes needed.`);
+      console.warn(`[remove_mcp_server_config] Server with name '${keyToRemove}' not found in ${configPath}. No changes needed.`);
     }
 
     const resultMessage = removed
-        ? `Successfully removed server '${server_id}' from ${configPath}.`
-        : `Server '${server_id}' not found in ${configPath}.`;
+        ? `Successfully removed server entry with name '${keyToRemove}' from ${configPath}.`
+        : `Server entry with name '${keyToRemove}' not found in ${configPath}.`;
     return { content: [{ type: 'text', text: resultMessage }] };
 
   } catch (error) {
@@ -498,7 +488,7 @@ const GetMcpServerDetailsTool = {
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "The unique MCPFinder ID of the MCP server." },
+      id: { type: "string", description: "The unique MCPFinder ID of the MCP server received from search_mcp_servers." },
     },
     required: ["id"],
   }
@@ -512,7 +502,7 @@ const AddMcpServerConfigTool = {
     properties: {
       client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
-      server_id: { type: "string", description: "A unique identifier for the server configuration entry." },
+      server_id: { type: "string", description: "A unique MCPFinder ID of the MCP server received from search_mcp_servers." },
       mcp_definition: {
         type: "object",
         properties: {
@@ -535,7 +525,7 @@ const RemoveMcpServerConfigTool = {
     properties: {
       client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
-      server_id: { type: "string", description: "The unique identifier of the server configuration entry to remove." }
+      server_id: { type: "string", description: "The unique MCP server identifier (config key name) of the server configuration entry to remove." }
     },
     required: ["server_id"]
   }
@@ -547,13 +537,6 @@ const allTools = [
   AddMcpServerConfigTool,
   RemoveMcpServerConfigTool,
 ];
-
-const toolImplementations = {
-  search_mcp_servers: search_mcp_servers,
-  get_mcp_server_details: get_mcp_server_details,
-  add_mcp_server_config: add_mcp_server_config,
-  remove_mcp_server_config: remove_mcp_server_config,
-};
 
 // --- MCP Server Instance Creation (Common) ---
 function createServerInstance(apiUrl) {
@@ -576,8 +559,12 @@ function setupRequestHandlers(server) {
     const toolSchemas = {
       search_mcp_servers: SearchServersInput,
       get_mcp_server_details: GetServerDetailsInput,
-      add_mcp_server_config: AddServerConfigInput,
-      remove_mcp_server_config: RemoveServerConfigInput,
+      add_mcp_server_config: AddServerConfigInput.extend({
+        server_id: z.string().describe("A unique MCPFinder ID (server_id) of the MCP server received from search_mcp_servers.")
+      }).omit({ server_id: true }),
+      remove_mcp_server_config: RemoveServerConfigInput.extend({
+        server_id: z.string().describe("The unique MCP server identifier (config key name) of the server configuration entry to remove.")
+      }).omit({ server_id: true })
     };
 
     // Handlers map
@@ -639,7 +626,7 @@ async function startStdioServer(apiUrl) {
         console.error(`   Using API: ${globalApiUrl}`);
         console.error("   Waiting for MCP requests via stdin...");
         // Keep the process alive indefinitely in stdio mode
-        setInterval(() => {}, 1 << 30); // Use a very large interval
+        setInterval(() => {}, 1 << 30); 
     } catch (error) {
         console.error("!!! Failed to connect server to stdio transport:", error);
         process.exit(1);
