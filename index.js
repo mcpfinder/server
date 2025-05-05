@@ -246,6 +246,47 @@ async function getConfigPath(clientType) {
     }
 }
 
+// Helper function to generate a short, sanitized key for the config file
+function generateConfigKey(url, fallbackId) {
+    const MAX_KEY_LENGTH = 16;
+
+    // Fallback if URL is missing
+    if (!url || typeof url !== 'string' || url.trim() === '') {
+        console.warn(`[generateConfigKey] URL is empty, using fallback ID: ${fallbackId}`);
+        return fallbackId.substring(0, MAX_KEY_LENGTH);
+    }
+
+    let key = url.trim();
+
+    // Remove http(s) prefix
+    key = key.replace(/^https?:\/\//, '');
+
+    // Convert to lowercase
+    key = key.toLowerCase();
+
+    // Replace invalid characters (not a-z, 0-9, _) with a single underscore
+    key = key.replace(/[^a-z0-9_]+/g, '_');
+
+    // Remove leading/trailing underscores
+    key = key.replace(/^_+|_+$/g, '');
+
+    // Truncate
+    if (key.length > MAX_KEY_LENGTH) {
+        key = key.substring(0, MAX_KEY_LENGTH);
+        // Ensure it doesn't end with underscore after truncation
+        key = key.replace(/_+$/g, '');
+    }
+
+    // Final fallback if sanitization resulted in an empty string
+    if (key === '') {
+        console.warn(`[generateConfigKey] Sanitization resulted in empty key for URL "${url}", using fallback ID: ${fallbackId}`);
+        return fallbackId.substring(0, MAX_KEY_LENGTH);
+    }
+
+    console.error(`[generateConfigKey] Generated key "${key}" for URL "${url}"`);
+    return key;
+}
+
 // Returns default { mcpServers: {} } if file not found, throws for other errors.
 async function readConfigFile(filePath) {
     try {
@@ -301,6 +342,9 @@ async function add_mcp_server_config(input) {
       const response = await fetch(detailsUrl);
       if (!response.ok) throw new Error(`API error (${response.status}) fetching details for ${server_id}`);
       const manifest = await response.json();
+
+      // Generate the key to use in the config file
+      const configKey = generateConfigKey(manifest.url, server_id);
 
       let defaultCommand = [];
       // If the URL exists and doesn't look like http:// or https://, assume it's a package name
@@ -372,12 +416,12 @@ async function add_mcp_server_config(input) {
         console.error(`[add_mcp_server_config] Original command was not a non-empty array:`, originalCommandArray);
     }
 
-    // Add or update the server entry
-    config[serversKey][server_id] = finalDefinition;
+    // Add or update the server entry using the generated key
+    config[serversKey][configKey] = finalDefinition;
 
     await writeConfigFile(resolvedPath, config);
 
-    let successMessage = `Successfully added/updated server '${server_id}' in ${resolvedPath}.`;
+    let successMessage = `Successfully added/updated server '${server_id}' (using key '${configKey}') in ${resolvedPath}.`;
     if (client_type === 'claude' || config_file_path) {
       successMessage += ' Restart client application for changes to take effect.';
     }
