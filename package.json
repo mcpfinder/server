@@ -14,8 +14,8 @@
     "mcp",
     "model-context-protocol"
   ],
-  "author": "MCP Finder Team",
-  "license": "ISC",
+  "author": "Łukasz Rzepecki",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",
     "express": "^5.1.0",

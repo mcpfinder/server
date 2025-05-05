@@ -10,6 +10,26 @@ Specifically, it enables the AI assistant to:
 
 **Note for AI Agents:** This server is your primary interface for finding and enabling new tools and capabilities requested by the user if they aren't already available in your current toolset. Always use `search_mcp_servers` first when asked for a capability you don't possess.
 
+## MCP Configuration
+To configure an MCP client, you need to create or modify its configuration file to add `mcpfinder` in an `mcpServers` object with the following command and arguments:
+```json
+{
+  "mcpServers": {
+    "mcpfinder": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mcpfinder/server"
+      ]
+    }
+  }
+}
+```
+
+**Fallback key:** If the top-level `mcpServers` object is not present, the tool will automatically look for and use a top-level `servers` object instead.
+
+**VS Code Note:** When configuring the MCP entry for Visual Studio Code, the JSON key must be named `servers` (not `mcpServers`).
+
 ## Installation & Usage
 
 Currently, the primary way to run this server is directly from the source code within the `mcpfinder` monorepo.
@@ -70,27 +90,31 @@ This MCP server exposes the following tools to the connected AI assistant:
 *   **Input Schema:**
     *   `id` (string, **required**): The unique MCPFinder ID of the MCP server.
 *   **Output:** The detailed server manifest and installation hints, along with an instruction to use `add_mcp_server_config`.
+*   **Note:** If installation hint generation encounters an error, a warning message (e.g. `"Warning: Failed to generate installation hint: ..."`) will be included in the output.
 
 ---
 
 ### 3. `add_mcp_server_config`
 
-*   **Description:** Adds or updates the configuration for a specific MCP server in the *client application's* local configuration file (e.g., Cursor's `~/.cursor/mcp.json`, Claude's `claude_desktop_config.json`). **Requires user permission via the client application before execution.** You must provide *either* `client_type` OR `config_file_path`.
+*   **Description:** Adds or updates the configuration for a specific MCP server in the *client application's* local configuration file (e.g., Cursor's `~/.cursor/mcp.json`, Claude's `claude_desktop_config.json`). You must provide *either* `client_type` OR `config_file_path`.
 *   **Input Schema:**
     *   `server_id` (string, **required**): A unique identifier for the server configuration entry (typically the MCPFinder ID obtained from search/details).
     *   `client_type` (string, optional): The type of client application (known types: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`. Use this for standard client installations.
-    *   `config_file_path` (string, optional): Absolute path to the target JSON configuration file (e.g., `/path/to/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients. Include spaces literally if needed.
+    *   `config_file_path` (string, optional): Absolute path or a path starting with `~` (home directory) to the target JSON configuration file (e.g., `/path/to/custom/mcp.json` or `~/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients. Include spaces literally if needed.
     *   `mcp_definition` (object, optional): Defines the server configuration.
         *   `command` (array of strings, optional): Command and arguments (e.g., `["npx", "-y", "my-mcp-package"]`). If omitted, defaults are fetched from the registry. If provided without `command` but with `env` or `workingDirectory`, the default command is fetched and merged.
         *   `env` (object, optional): Environment variables (e.g., `{"API_KEY": "YOUR_KEY"}`).
         *   `workingDirectory` (string, optional): The working directory for the server process.
+*   **Note:** When writing to the client config file, the tool will format the server entry with:
+  -  `command`: a single string
+  -  `args`: an array of strings
 *   **Output:** A success or error message.
 
 ---
 
 ### 4. `remove_mcp_server_config`
 
-*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. **Requires user permission via the client application before execution.** You must provide *either* `client_type` OR `config_file_path`.
+*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. You must provide *either* `client_type` OR `config_file_path`.
 *   **Input Schema:**
     *   `server_id` (string, **required**): The unique identifier of the server configuration entry to remove.
     *   `client_type` (string, optional): The type of client application (known types: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`.
@@ -101,12 +125,12 @@ This MCP server exposes the following tools to the connected AI assistant:
 
 ## Security Considerations
 
-The tools `add_mcp_server_config` and `remove_mcp_server_config` modify files on the user's local system. It is **CRITICAL** that the host MCP client application (e.g., Cursor, Claude Desktop, Windsurf) implements a robust permission system. The client **MUST** prompt the user for explicit approval before allowing this MCP server to execute these file modification tools. This server itself does not perform permission checks; it relies entirely on the calling client for security enforcement.
+The tools `add_mcp_server_config` and `remove_mcp_server_config` modify files on the user's local system. This server itself does not perform permission checks; it relies entirely on the calling client for security enforcement.
 
 ## Contributing
 
-Please refer to the main project `CONTRIBUTING.md` (if available) for details on how to contribute.
+For contributions, please contact: mcpfinder(dot}dev[at}domainsbyproxy{dot]com
 
 ## License
 
-ISC (as per `package.json`). 
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
