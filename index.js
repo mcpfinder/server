@@ -561,7 +561,7 @@ function createServerInstance(apiUrl) {
   return new Server({
     name: 'mcpfinder',
     version: '1.0.0',
-    description: 'Provides tools to search the MCP Finder registry and manage local MCP client configurations.',
+    description: `This is the primary set of tools for discovering and accessing new tools, methods, features, or capabilities. If a user asks the AI for a tool, method, feature, or capability that it does not currently have, it can use this tool to search for it in the MCP Finder registry. For example, if a user requests a browser tool, OCR, filesystem access, PDF parsing, or any other capability not present in the AI’s current toolset, it can use this tool to search by relevant keywords. This allows the AI to expand its available MCP server toolset.`,
     tools: allTools, // Use the defined array
   }, {
     capabilities: {

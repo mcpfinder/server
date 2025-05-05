@@ -8,7 +8,7 @@ Specifically, it enables the AI assistant to:
 2.  **Retrieve details** about specific servers (via `get_mcp_server_details`).
 3.  **Manage** the client application's local MCP server configuration file (add/update via `add_mcp_server_config`, remove via `remove_mcp_server_config`).
 
-**Note for AI Agents:** This server is your primary interface for finding and enabling new tools and capabilities requested by the user if they aren't already available in your current toolset. Always use `search_mcp_servers` first when asked by the user for a capability you don't possess.
+**Note for AI Agents:** This server is the primary interface for finding and enabling new tools and capabilities requested by the user if they aren't already available in current MCP toolset. Use `search_mcp_servers` first when asked by the user for a capability you don't possess.
 
 ## Quick Start
 
@@ -26,7 +26,6 @@ To manually configure an MCP client, you need to create or modify its JSON confi
 
 ```json
 {
-  // Either "mcpServers" or "servers" depending on the client/existing structure
   "mcpServers": { 
     "mcpfinder": {
       "command": "npx",
@@ -51,7 +50,7 @@ To manually configure an MCP client, you need to create or modify its JSON confi
 
 When running from source (`node index.js`), the following command-line options are available:
 
-*   `--setup`: Run the interactive setup helper described above. This automatically configures a client application (e.g., Cursor, VS Code) to use this server. Mutually exclusive with other options like `--http` or `--port`.
+*   `--setup`: Run the interactive setup helper described above. This automatically configures a client application (e.g., Cursor, Claude Desktop) to use this server. Mutually exclusive with other options like `--http` or `--port`.
 *   `--http`: Run the server in HTTP mode instead of the default Stdio mode. Useful for direct testing or specific integrations, but may not work with clients expecting Stdio.
 *   `--port <number>`: Specify the port for HTTP mode (default: 6181, overrides `MCP_PORT` env var).
 *   `--api-url <url>`: Specify the MCP Finder Registry API URL (default: https://mcpfinder.dev, overrides `MCPFINDER_API_URL` env var).
@@ -59,7 +58,7 @@ When running from source (`node index.js`), the following command-line options a
 
 The server uses the following environment variables:
 
-*   `MCPFINDER_API_URL`: The base URL for the MCP Finder Registry API. Defaults to `https://mcpfinder.dev`. Set this if you are running a local instance of the registry API (e.g., `http://localhost:8787`).
+*   `MCPFINDER_API_URL`: The base URL for the MCP Finder Registry API. Defaults to `https://mcpfinder.dev`.
 *   `MCP_PORT` (HTTP Mode Only): The port number for the server to listen on. Defaults to `6181`.
 
 ## Provided Tools
@@ -68,42 +67,39 @@ This MCP server exposes the following tools to the connected AI assistant:
 
 ### 1. `search_mcp_servers`
 
-*   **Description:** Searches the MCP Finder Registry for available MCP servers. **This is the primary tool for discovering and accessing new tools, methods, features, or capabilities.** If a user asks for a tool, method, feature, or capability that you do not currently have, you **MUST** use this tool to search for it by relevant keywords. This is the required first step to expand your available tools.
+*   **Description:** Searches the MCP Finder Registry for available MCP servers. This is the primary tool for discovering and accessing new tools, methods, features, or capabilities.
 *   **Input Schema:**
     *   `query` (string, optional): Keywords to search for in tool name or description.
     *   `tag` (string, optional): Specific tag to filter by.
-*   **Output:** A list of matching server summaries (ID, name, description, URL, tags). The typical next step is to use `get_mcp_server_details` for more info or `add_mcp_server_config` to install one.
+*   **Output:** A list of matching server summaries (server_id, name, description, URL, tags). The typical next step is to use `get_mcp_server_details` for more info or directly `add_mcp_server_config` to install one.
 
 ### 2. `get_mcp_server_details`
 
-*   **Description:** Retrieves detailed information about a specific MCP server from the registry, including its full manifest and basic installation suggestions (command, environment variables). Use this after finding a server ID via `search_mcp_servers` to get more information before potentially adding it.
+*   **Description:** Retrieves detailed information about a specific MCP server from the registry, including its full manifest and basic installation suggestions (command, environment variables). Use this after finding a server_id via `search_mcp_servers` to get more information before potentially adding it.
 *   **Input Schema:**
-    *   `id` (string, **required**): The unique MCPFinder ID of the MCP server.
-*   **Output:** The detailed server manifest and installation hints. The typical next step is to use `add_mcp_server_config` to install the server.
-*   **Note:** If installation hint generation encounters an error, a warning message (e.g. `"Warning: Failed to generate installation hint: ..."`) will be included in the output.
+    *   `server_id` (string, **required**): The unique MCPFinder ID of the MCP server.
+*   **Output:** The detailed server manifest and installation hints. The next step is to use `add_mcp_server_config` to install the server.
 
 ### 3. `add_mcp_server_config`
 
-*   **Description:** Adds or updates the configuration for a specific MCP server in the *client application's* local configuration file (e.g., Cursor's `~/.cursor/mcp.json`, VS Code's `settings.json`). You must provide *either* `client_type` OR `config_file_path`. The tool automatically detects whether the target configuration file uses the `mcpServers` or `servers` key for the list of servers and uses the appropriate key.
+*   **Description:** Adds or updates the configuration for a specific MCP server in the *client application's* local configuration file (e.g., Cursor's `~/.cursor/mcp.json`). You must provide *either* `client_type` OR `config_file_path`.
 *   **Input Schema:**
-    *   `server_id` (string, **required**): A unique identifier for the server configuration entry (typically the MCPFinder ID obtained from search/details).
-    *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`, `'vscode'`). Mutually exclusive with `config_file_path`. Use this for standard client installations.
-    *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file (e.g., `/path/to/custom/mcp.json` or `~/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients. Include spaces literally if needed.
+    *   `server_id` (string, **required**): A unique identifier for the server configuration entry (the MCPFinder ID obtained from `search_mcp_servers`).
+    *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`. Use this for standard client installations.
+    *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file (e.g., `/path/to/custom/mcp.json` or `~/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients.
     *   `mcp_definition` (object, optional): Defines the server configuration.
-        *   `command` (array of strings, optional): Command and arguments (e.g., `["npx", "-y", "my-mcp-package"]`). If omitted, defaults are fetched from the registry (if possible, typically `["npx", "-y", "<package-name>"]`). If provided without `command` but with `env` or `workingDirectory`, the default command is fetched and merged with the provided `env`/`workingDirectory`.
+        *   `command` (string, optional): Command - e.g., `"npx"` (default)
+        *   `args` (array of strings, optional): Arguments - e.g., `["-y", "my-mcp-package"]`). If omitted, defaults are fetched from the registry (if possible, typically `["-y", "@repo/package-name"]`). If provided without `command` but with `env` or `workingDirectory`, the default command is fetched and merged with the provided `env`/`workingDirectory`.
         *   `env` (object, optional): Environment variables (e.g., `{"API_KEY": "YOUR_KEY"}`). Merged with defaults if `command` is omitted.
         *   `workingDirectory` (string, optional): The working directory for the server process. Merged with defaults if `command` is omitted.
-*   **Note:** When writing to the client config file, the tool formats the server entry according to common client conventions. This typically involves splitting the input `command` array into:
-    *   `command`: a single string (the first element, usually the executable).
-    *   `args`: an array of strings (the remaining elements, the arguments).
 *   **Output:** A success or error message.
 
 ### 4. `remove_mcp_server_config`
 
-*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. You must provide *either* `client_type` OR `config_file_path`. The tool automatically checks both `mcpServers` and `servers` keys.
+*   **Description:** Removes the configuration for a specific MCP server from the client application's local configuration file. You must provide *either* `client_type` OR `config_file_path`.
 *   **Input Schema:**
-    *   `server_id` (string, **required**): The unique identifier of the server configuration entry to remove.
-    *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`, `'vscode'`). Mutually exclusive with `config_file_path`.
+    *   `server_id` (string, **required**): The unique identifier of the server configuration entry to remove (config key name).
+    *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`.
     *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file. Mutually exclusive with `client_type`.
 *   **Output:** A success or error message indicating whether the entry was found and removed.
 
