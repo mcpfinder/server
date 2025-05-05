@@ -559,12 +559,8 @@ function setupRequestHandlers(server) {
     const toolSchemas = {
       search_mcp_servers: SearchServersInput,
       get_mcp_server_details: GetServerDetailsInput,
-      add_mcp_server_config: AddServerConfigInput.extend({
-        server_id: z.string().describe("A unique MCPFinder ID (server_id) of the MCP server received from search_mcp_servers.")
-      }).omit({ server_id: true }),
-      remove_mcp_server_config: RemoveServerConfigInput.extend({
-        server_id: z.string().describe("The unique MCP server identifier (config key name) of the server configuration entry to remove.")
-      }).omit({ server_id: true })
+      add_mcp_server_config: AddServerConfigInput,
+      remove_mcp_server_config: RemoveServerConfigInput,
     };
 
     // Handlers map
@@ -621,12 +617,12 @@ async function startStdioServer(apiUrl) {
     };
 
     try {
+        // Keep the process alive indefinitely in stdio mode BEFORE connect
+        setInterval(() => {}, 1 << 30); 
         await serverInstance.connect(transport);
         console.error("🚀 MCP Finder Server (Stdio) connected and ready.");
         console.error(`   Using API: ${globalApiUrl}`);
         console.error("   Waiting for MCP requests via stdin...");
-        // Keep the process alive indefinitely in stdio mode
-        setInterval(() => {}, 1 << 30); 
     } catch (error) {
         console.error("!!! Failed to connect server to stdio transport:", error);
         process.exit(1);
