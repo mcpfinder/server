@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "bin": {
-    "mcpfinder-server": "./index.js"
+    "mcpfinder-server": "index.js"
   },
   "files": [
     "index.js",
