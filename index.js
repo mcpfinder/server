@@ -412,7 +412,7 @@ async function remove_mcp_server_config(input) {
 
 const SearchMcpServersTool = {
   name: 'search_mcp_servers',
-  description: `This is the primary tool for discovering and accessing new tools, methods, features, or capabilities. **If a user asks for a tool, method, feature, or capability that you do not currently have, you MUST use this tool to search for it in the MCP Finder registry.** For example, if a user asks for an "echo" tool, OCR, file upload, PDF parsing, or any other capability not present in your current toolset, use this tool to search by relevant keywords. This is the required first step to expand your available tools.`,
+  description: `This is the primary tool for discovering and accessing new tools, methods, features, or capabilities. **If a user asks for a tool, method, feature, or capability that you do not currently have, you MUST use this tool to search for it in the MCP Finder registry.** For example, if a user asks for a browser tool, OCR, filesystem access, PDF parsing, or any other capability not present in your current toolset, use this tool to search by relevant keywords. This is the required first step to expand your available tools.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -425,7 +425,7 @@ const SearchMcpServersTool = {
 
 const GetMcpServerDetailsTool = {
   name: 'get_mcp_server_details',
-  description: 'Retrieves detailed information about a specific MCP server/tool from the registry, including its manifest and potential installation details. Use this after finding a tool with search_mcp_servers to get more info.',
+  description: 'Retrieves detailed information about a specific MCP server/tool from the registry, including its manifest and installation details. Use this after finding a tool with search_mcp_servers to get more information, or directly use add_mcp_server_config to install it.',
   inputSchema: {
     type: "object",
     properties: {
@@ -437,11 +437,11 @@ const GetMcpServerDetailsTool = {
 
 const AddMcpServerConfigTool = {
   name: 'add_mcp_server_config',
-  description: "Adds or updates the configuration for a specific MCP server/tool in the client application (e.g., Cursor, Claude). Provide EITHER client_type OR config_file_path to specify the target config file.",
+  description: "Enables capabilities (e.g., tools, features) from a specific MCP server/tool. Add or update its configuration in the client application (e.g., Cursor, Claude, VS Code) using server_id obtained from search_mcp_servers results. Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "A unique identifier for the server configuration entry." },
       mcp_definition: {
@@ -460,11 +460,11 @@ const AddMcpServerConfigTool = {
 
 const RemoveMcpServerConfigTool = {
   name: 'remove_mcp_server_config',
-  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude). Provide EITHER client_type OR config_file_path to specify the target config file.",
+  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude). Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (e.g., 'cursor', 'claude'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "The unique identifier of the server configuration entry to remove." }
     },
