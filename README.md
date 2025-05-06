@@ -1,10 +1,10 @@
-# MCP Finder Server (`@mcpfinder/server`)
+# MCPfinder 🔧🤖 (`@mcpfinder/server`)
 
-**Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCP Finder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
+**Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCPfinder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
 
 ***App Store for Agents***
 
-Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCP Finder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
+Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCPfinder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
 
 ***Plug-and-Play Tools for LLMs***
 
@@ -14,7 +14,7 @@ This Node.js application implements an MCP (Model Context Protocol) server desig
 
 Specifically, it enables the AI assistant to:
 
-1.  **Discover** available MCP servers registered in the central [MCP Finder Registry](https://mcpfinder.dev) (via `search_mcp_servers`).
+1.  **Discover** available MCP servers registered in the central [MCPfinder Registry](https://mcpfinder.dev) (via `search_mcp_servers`).
 2.  **Retrieve details** about specific servers (via `get_mcp_server_details`).
 3.  **Manage** the client application's local MCP server configuration file (add/update via `add_mcp_server_config`, remove via `remove_mcp_server_config`).
 
@@ -63,12 +63,12 @@ When running from source (`node index.js`), the following command-line options a
 *   `--setup`: Run the interactive setup helper described above. This automatically configures a client application (e.g., Cursor, Claude Desktop) to use this server. Mutually exclusive with other options like `--http` or `--port`.
 *   `--http`: Run the server in HTTP mode instead of the default Stdio mode. Useful for direct testing or specific integrations, but may not work with clients expecting Stdio.
 *   `--port <number>`: Specify the port for HTTP mode (default: 6181, overrides `MCP_PORT` env var).
-*   `--api-url <url>`: Specify the MCP Finder Registry API URL (default: https://mcpfinder.dev, overrides `MCPFINDER_API_URL` env var).
+*   `--api-url <url>`: Specify the MCPfinder Registry API URL (default: https://mcpfinder.dev, overrides `MCPFINDER_API_URL` env var).
 *   `--help`: Display the help message.
 
 The server uses the following environment variables:
 
-*   `MCPFINDER_API_URL`: The base URL for the MCP Finder Registry API. Defaults to `https://mcpfinder.dev`.
+*   `MCPFINDER_API_URL`: The base URL for the MCPfinder Registry API. Defaults to `https://mcpfinder.dev`.
 *   `MCP_PORT` (HTTP Mode Only): The port number for the server to listen on. Defaults to `6181`.
 
 ## Provided Tools
@@ -77,7 +77,7 @@ This MCP server exposes the following tools to the connected AI assistant:
 
 ### 1. `search_mcp_servers`
 
-*   **Description:** Searches the MCP Finder Registry for available MCP servers. This is the primary tool for discovering and accessing new tools, methods, features, or capabilities.
+*   **Description:** Searches the MCPfinder Registry for available MCP servers. This is the primary tool for discovering and accessing new tools, methods, features, or capabilities.
 *   **Input Schema:**
     *   `query` (string, optional): Keywords to search for in tool name or description.
     *   `tag` (string, optional): Specific tag to filter by.
@@ -87,17 +87,17 @@ This MCP server exposes the following tools to the connected AI assistant:
 
 *   **Description:** Retrieves detailed information about a specific MCP server from the registry, including its full manifest and basic installation suggestions (command, environment variables). Use this after finding a server_id via `search_mcp_servers` to get more information before potentially adding it.
 *   **Input Schema:**
-    *   `server_id` (string, **required**): The unique MCPFinder ID of the MCP server.
+    *   `server_id` (string, **required**): The unique MCPfinder ID of the MCP server.
 *   **Output:** The detailed server manifest and installation hints. The next step is to use `add_mcp_server_config` to install the server.
 
 ### 3. `add_mcp_server_config`
 
 *   **Description:** Adds or updates the configuration for a specific MCP server in the *client application's* local configuration file (e.g., Cursor's `~/.cursor/mcp.json`). You must provide *either* `client_type` OR `config_file_path`.
 *   **Input Schema:**
-    *   `server_id` (string, **required**): A unique identifier for the server configuration entry (the MCPFinder ID obtained from `search_mcp_servers`).
+    *   `server_id` (string, **required**): A unique identifier for the server configuration entry (the MCPfinder ID obtained from `search_mcp_servers`).
     *   `client_type` (string, optional): The type of client application (known types determined dynamically, examples: `'cursor'`, `'claude'`, `'windsurf'`). Mutually exclusive with `config_file_path`. Use this for standard client installations.
     *   `config_file_path` (string, optional): An *absolute path* or a path starting with `~` (home directory) to the target JSON configuration file (e.g., `/path/to/custom/mcp.json` or `~/custom/mcp.json`). Mutually exclusive with `client_type`. Use this for non-standard locations or custom clients.
-    *   `mcp_definition` (object, optional): Defines the server configuration. If omitted, or if certain fields are missing, defaults will be fetched from the MCP Finder Registry based on the `server_id`.
+    *   `mcp_definition` (object, optional): Defines the server configuration. If omitted, or if certain fields are missing, defaults will be fetched from the MCPfinder Registry based on the `server_id`.
         *   `command` (array of strings, optional): The command and its arguments (e.g., `["npx", "-y", "my-mcp-package"]`). If omitted, or if only `env`/`workingDirectory` are provided below, the default command is fetched from the registry.
         *   `env` (object, optional): Environment variables (e.g., `{"API_KEY": "YOUR_KEY"}`). Merged with defaults if `command` is omitted.
         *   `workingDirectory` (string, optional): The working directory for the server process. Merged with defaults if `command` is omitted.

@@ -27,15 +27,19 @@ let globalApiUrl = DEFAULT_API_URL;
 
 // --- Help Text ---
 const helpText = `
-MCP Finder Server
+MCPfinder
 
 Manages local MCP configurations for clients like Cursor and Claude.
-Communicates with the MCP Finder Registry API (https://mcpfinder.dev/api).
+Communicates with the MCPFinder Registry API (https://mcpfinder.dev/api).
 
-Usage: node index.js [options]
+Usage: node index.js [options] [command]
 
-Options:
-  --setup           Run the interactive setup to configure a client.
+Commands:
+  (no command)      Run the server (default)
+  install           For users and AI clients: Run the interactive setup to configure a client
+  register          For server publishers: Register your MCP server package with the MCPFinder registry
+
+Options (for running the server):
   --http            Run the server in HTTP mode. Default is Stdio mode.
   --port <number>   Port for HTTP mode (overrides MCP_PORT env var). Default: ${DEFAULT_PORT}
   --api-url <url>   URL of the MCP Finder Registry API (overrides MCPFINDER_API_URL env var). Default: ${DEFAULT_API_URL}
@@ -50,7 +54,36 @@ Environment Variables:
 const args = process.argv.slice(2);
 const runHttp = args.includes('--http');
 const showHelp = args.includes('--help');
-const runSetupFlag = args.includes('--setup');
+
+// Parse for commands with their aliases
+const isSetupCommand = args.includes('setup') || args.includes('install') || args.includes('init');
+const isRegisterCommand = args.includes('register');
+
+// Define known flags and commands
+const knownFlags = ['--help', '--http', '--port', '--api-url'];
+const knownCommands = ['setup', 'install', 'init', 'register'];
+
+// Check for unknown commands
+const hasUnknownCommand = (() => {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    // Skip flags and their values
+    if (knownFlags.includes(arg)) {
+      // If this is a flag that takes a value, skip the next argument
+      if (arg === '--port' || arg === '--api-url') {
+        i++;
+      }
+      continue;
+    }
+    // If it's a known command, it's valid
+    if (knownCommands.includes(arg)) {
+      continue;
+    }
+    // Otherwise, it's an unknown command
+    return true;
+  }
+  return false;
+})();
 
 function getArgValue(argName) {
     const index = args.indexOf(argName);
@@ -544,7 +577,7 @@ function createServerInstance(apiUrl) {
   return new Server({
     name: 'mcpfinder',
     version: '1.0.0',
-    description: `This is the primary set of tools for discovering and accessing new tools, methods, features, or capabilities. If a user asks the AI for a tool, method, feature, or capability that it does not currently have, it can use this tool to search for it in the MCP Finder registry. For example, if a user requests a browser tool, OCR, filesystem access, PDF parsing, or any other capability not present in the AI’s current toolset, it can use this tool to search by relevant keywords. This allows the AI to expand its available MCP server toolset.`,
+    description: `This is the primary set of tools for discovering and accessing new tools, methods, features, or capabilities. If a user asks the AI for a tool, method, feature, or capability that it does not currently have, it can use this tool to search for it in the MCP Finder registry. For example, if a user requests a browser tool, OCR, filesystem access, PDF parsing, or any other capability not present in the AI's current toolset, it can use this tool to search by relevant keywords. This allows the AI to expand its available MCP server toolset.`,
     tools: allTools, // Use the defined array
   }, {
     capabilities: {
@@ -710,13 +743,16 @@ process.on('SIGTERM', shutdown);
 
 // --- Main Execution Logic ---
 
-if (showHelp) {
+if (showHelp || hasUnknownCommand) {
+  if (hasUnknownCommand) {
+    console.log("Unknown command or invalid arguments. See usage below:\n");
+  }
   console.log(helpText);
   process.exit(0);
 }
 
-// Handle --setup flag BEFORE other logic
-if (runSetupFlag) {
+// Handle command line commands
+if (isSetupCommand) {
   (async () => {
     try {
       console.log("Running interactive setup...");
@@ -733,8 +769,24 @@ if (runSetupFlag) {
       process.exit(1);
     }
   })();
+} else if (isRegisterCommand) {
+  (async () => {
+    try {
+      console.log("Running MCP server registration...");
+      const { runRegister } = await import('./src/register.js');
+      await runRegister();
+      process.exit(0);
+    } catch (error) {
+      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+          console.error("Error: Register module ('./src/register.js') not found.");
+      } else {
+          console.error("Registration failed:", error);
+      }
+      process.exit(1);
+    }
+  })();
 } else {
-  // Proceed with normal server startup only if --setup is not used
+  // Proceed with normal server startup only if no special command is used
   const finalPort = cliPort ? parseInt(cliPort, 10) : (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : DEFAULT_PORT);
   let validatedPort = finalPort;
   const finalApiUrl = cliApiUrl || process.env.MCPFINDER_API_URL || DEFAULT_API_URL;
