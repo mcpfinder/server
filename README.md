@@ -2,10 +2,6 @@
 
 **Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCPfinder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
 
-<a href="https://glama.ai/mcp/servers/@mcpfinder/server">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@mcpfinder/server/badge" alt="MCPfinder Server MCP server" />
-</a>
-
 ***App Store for Agents***
 
 Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCPfinder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
@@ -28,9 +24,10 @@ Specifically, it enables the AI assistant to:
 
 Run in your terminal the interactive setup tool to automatically update the MCP configuration file:
 ```bash
-npx -y @mcpfinder/server --setup
+npx -y @mcpfinder/server install
 ```
 This command guides you through selecting your client (Cursor, VS Code, Claude, etc.) and adds the necessary `mcpfinder` entry to the correct configuration file (e.g., `~/.cursor/mcp.json`).
+See "Running from source" and "Commands and Options" for more details if you are working directly with the source code.
 
 ## Manual Configuration
 
@@ -48,7 +45,6 @@ To manually configure an MCP client, you need to create or modify its JSON confi
         "@mcpfinder/server"
       ]
     },
-    // ... other server entries ...
   }
 }
 ```
@@ -60,15 +56,38 @@ To manually configure an MCP client, you need to create or modify its JSON confi
 *   Clone this repository, e.g., `git clone https://github.com/mcpfinder/server`
 *   Run `node index.js` for Stdio mode or `node index.js --http` for HTTP mode.
 
-### Options
+### Commands and Options
 
-When running from source (`node index.js`), the following command-line options are available:
+When running from source (`node index.js`), the script can be invoked in several ways:
 
-*   `--setup`: Run the interactive setup helper described above. This automatically configures a client application (e.g., Cursor, Claude Desktop) to use this server. Mutually exclusive with other options like `--http` or `--port`.
-*   `--http`: Run the server in HTTP mode instead of the default Stdio mode. Useful for direct testing or specific integrations, but may not work with clients expecting Stdio.
-*   `--port <number>`: Specify the port for HTTP mode (default: 6181, overrides `MCP_PORT` env var).
-*   `--api-url <url>`: Specify the MCPfinder Registry API URL (default: https://mcpfinder.dev, overrides `MCPFINDER_API_URL` env var).
-*   `--help`: Display the help message.
+**Running the Server (Default Behavior):**
+If no command is specified, `index.js` starts the MCP server.
+*   **Stdio Mode (default):**
+    ```bash
+    node index.js
+    ```
+*   **HTTP Mode:**
+    ```bash
+    node index.js --http
+    ```
+    *   `--port <number>`: Specify the port for HTTP mode (default: 6181, or `MCP_PORT` env var).
+    *   `--api-url <url>`: Specify the MCPfinder Registry API URL used by the tools (default: `https://mcpfinder.dev`, or `MCPFINDER_API_URL` env var).
+
+**Executing Commands:**
+*   `install`: Run the interactive setup to configure a client application.
+    ```bash
+    node index.js install
+    ```
+*   `register`: For server publishers to register their MCP server package with the MCPFinder registry.
+    ```bash
+    node index.js register
+    ```
+
+**Getting Help:**
+*   `--help`: Display the help message detailing commands and options.
+    ```bash
+    node index.js --help
+    ```
 
 The server uses the following environment variables:
 
@@ -87,11 +106,14 @@ This MCP server exposes the following tools to the connected AI assistant:
     *   `tag` (string, optional): Specific tag to filter by.
 *   **Output:** A list of matching server summaries (server_id, name, description, URL, tags). The typical next step is to use `get_mcp_server_details` for more info or directly `add_mcp_server_config` to install one.
 
+⚠️ **Note:** The registry currently contains several hundred servers that can be run locally using `npx` in **stdio** mode without requiring environment variables for basic operation. Future updates will expand support to include a wider range of servers, including paid and commercial options that require environment keys.
+
+
 ### 2. `get_mcp_server_details`
 
 *   **Description:** Retrieves detailed information about a specific MCP server from the registry, including its full manifest and basic installation suggestions (command, environment variables). Use this after finding a server_id via `search_mcp_servers` to get more information before potentially adding it.
 *   **Input Schema:**
-    *   `server_id` (string, **required**): The unique MCPfinder ID of the MCP server.
+    *   `id` (string, **required**): The unique MCPfinder's server_id obtained from `search_mcp_servers`.
 *   **Output:** The detailed server manifest and installation hints. The next step is to use `add_mcp_server_config` to install the server.
 
 ### 3. `add_mcp_server_config`
@@ -130,3 +152,7 @@ For contributions, please contact: mcpfinder(dot}dev[at}domainsbyproxy{dot]com
 This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 It means you're free to use (including commercially), modify, and share it. However, if you run a modified version, you're also required to publicly share your version.
+
+---
+
+[![Badge](https://glama.ai/mcp/servers/@mcpfinder/server/badge)](https://glama.ai/mcp/servers/@mcpfinder/server)
