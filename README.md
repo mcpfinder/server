@@ -2,6 +2,10 @@
 
 **Meet the simplest way to supercharge your coding and AI agents with MCP — an "API for AI." MCPfinder enables language models to search for and install new capabilities on demand through client applications that support the MCP protocol. No coding or manual setup required.**
 
+<a href="https://glama.ai/mcp/servers/@mcpfinder/server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@mcpfinder/server/badge" alt="MCPfinder Server MCP server" />
+</a>
+
 ***App Store for Agents***
 
 Users can request tools the AI doesn't have yet, or the AI can autonomously expand its own capabilities by discovering relevant MCP servers. From code generators and data analyzers to specialized knowledge tools, MCPfinder acts like a map and toolbox for AI — transforming static models into evolving, capability-hunting agents that grow more powerful with every interaction.
