@@ -166,32 +166,60 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
     // Build capabilities array
     const capabilities = [];
     
-    // Add tools
-    tools.forEach(tool => {
-        capabilities.push({
-            name: tool.name,
-            type: 'tool',
-            description: tool.description || ''
-        });
-    });
+    // Check if this is manual registration with placeholder capabilities
+    const isManual = tools.some(t => t.name === 'unknown') || 
+                     resources.some(r => r.name === 'unknown') || 
+                     prompts.some(p => p.name === 'unknown');
     
-    // Add resources
-    resources.forEach(resource => {
-        capabilities.push({
-            name: resource.name || resource.uri,
-            type: 'resource',
-            description: resource.description || ''
+    if (isManual) {
+        // For manual registration, create generic capability entries
+        if (tools.length > 0) {
+            capabilities.push({
+                name: 'tools_available',
+                type: 'tool',
+                description: 'Tools will be available after authentication'
+            });
+        }
+        if (resources.length > 0) {
+            capabilities.push({
+                name: 'resources_available',
+                type: 'resource',
+                description: 'Resources will be available after authentication'
+            });
+        }
+        if (prompts.length > 0) {
+            capabilities.push({
+                name: 'prompts_available',
+                type: 'prompt',
+                description: 'Prompts will be available after authentication'
+            });
+        }
+    } else {
+        // Add actual capabilities from introspection
+        tools.forEach(tool => {
+            capabilities.push({
+                name: tool.name,
+                type: 'tool',
+                description: tool.description || ''
+            });
         });
-    });
-    
-    // Add prompts
-    prompts.forEach(prompt => {
-        capabilities.push({
-            name: prompt.name,
-            type: 'prompt',
-            description: prompt.description || ''
+        
+        resources.forEach(resource => {
+            capabilities.push({
+                name: resource.name || resource.uri,
+                type: 'resource',
+                description: resource.description || ''
+            });
         });
-    });
+        
+        prompts.forEach(prompt => {
+            capabilities.push({
+                name: prompt.name,
+                type: 'prompt',
+                description: prompt.description || ''
+            });
+        });
+    }
     
     // Determine installation instructions
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
@@ -224,13 +252,17 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
         ...(installation && { installation })
     };
     
-    // Add auth if API key mentioned
+    // Add auth if required
     if (additionalInfo.requiresApiKey) {
         manifest.auth = {
-            type: 'api-key',
-            instructions: additionalInfo.authInstructions || 'Set the API key as an environment variable',
-            key_name: additionalInfo.keyName
+            type: additionalInfo.type || 'api-key',
+            instructions: additionalInfo.authInstructions || 'Set the API key as an environment variable'
         };
+        
+        // Only add key_name for api-key type
+        if (manifest.auth.type === 'api-key' && additionalInfo.keyName) {
+            manifest.auth.key_name = additionalInfo.keyName;
+        }
     }
     
     return manifest;
@@ -327,8 +359,33 @@ export async function runRegister() {
                 
                 if (!introspectionResult.isValid) {
                     console.log(chalk.red(`❌ Not a valid MCP server: ${introspectionResult.error}`));
-                    console.log(chalk.yellow('Please try a different package or URL.\n'));
-                    packageOrUrl = ''; // Reset to ask again
+                    
+                    // Check if it's an authentication error
+                    if (introspectionResult.error.includes('401') || introspectionResult.error.includes('Authentication required')) {
+                        console.log(chalk.yellow('\nThis server requires authentication.'));
+                        const continueAnswer = await askQuestion(rl, 'Would you like to register it manually without introspection? (y/n): ');
+                        
+                        if (continueAnswer.toLowerCase() === 'y') {
+                            // Manual registration for authenticated servers
+                            introspectionResult = {
+                                isValid: true,
+                                isManual: true,
+                                serverInfo: {},
+                                capabilities: {},
+                                tools: [],
+                                resources: [],
+                                prompts: []
+                            };
+                            console.log(chalk.yellow('\nProceeding with manual registration...'));
+                            console.log(chalk.dim('Note: You\'ll need to provide server details manually.'));
+                        } else {
+                            console.log(chalk.yellow('Please try a different package or URL.\n'));
+                            packageOrUrl = ''; // Reset to ask again
+                        }
+                    } else {
+                        console.log(chalk.yellow('Please try a different package or URL.\n'));
+                        packageOrUrl = ''; // Reset to ask again
+                    }
                 } else {
                     console.log(chalk.green('✅ Successfully connected to MCP server'));
                 }
@@ -362,21 +419,23 @@ export async function runRegister() {
             }
         }
         
-        // Display discovered capabilities
-        console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
-        console.log(`${chalk.bold('Server:')} ${introspectionResult.serverInfo?.name || 'Unknown'}`);
-        console.log(`${chalk.bold('Version:')} ${introspectionResult.serverInfo?.version || 'Unknown'}`);
-        console.log(`${chalk.bold('Tools:')} ${introspectionResult.tools.length}`);
-        console.log(`${chalk.bold('Resources:')} ${introspectionResult.resources.length}`);
-        console.log(`${chalk.bold('Prompts:')} ${introspectionResult.prompts.length}`);
-        
-        if (introspectionResult.tools.length > 0) {
-            console.log(chalk.gray('\nTools:'));
-            introspectionResult.tools.slice(0, 5).forEach(tool => {
-                console.log(`  - ${tool.name}: ${tool.description || 'No description'}`);
-            });
-            if (introspectionResult.tools.length > 5) {
-                console.log(`  ... and ${introspectionResult.tools.length - 5} more`);
+        // Display discovered capabilities (skip for manual registration)
+        if (!introspectionResult.isManual) {
+            console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
+            console.log(`${chalk.bold('Server:')} ${introspectionResult.serverInfo?.name || 'Unknown'}`);
+            console.log(`${chalk.bold('Version:')} ${introspectionResult.serverInfo?.version || 'Unknown'}`);
+            console.log(`${chalk.bold('Tools:')} ${introspectionResult.tools.length}`);
+            console.log(`${chalk.bold('Resources:')} ${introspectionResult.resources.length}`);
+            console.log(`${chalk.bold('Prompts:')} ${introspectionResult.prompts.length}`);
+            
+            if (introspectionResult.tools.length > 0) {
+                console.log(chalk.gray('\nTools:'));
+                introspectionResult.tools.slice(0, 5).forEach(tool => {
+                    console.log(`  - ${tool.name}: ${tool.description || 'No description'}`);
+                });
+                if (introspectionResult.tools.length > 5) {
+                    console.log(`  ... and ${introspectionResult.tools.length - 5} more`);
+                }
             }
         }
         
@@ -385,6 +444,11 @@ export async function runRegister() {
         
         // Collect additional information (skip for unauthorized updates)
         let description, tags = [], requiresApiKey = false, authInfo = {};
+        
+        // For manual registration of authenticated servers, always ask for auth info
+        if (introspectionResult.isManual) {
+            requiresApiKey = true;
+        }
         
         if (!hasSecret && isUpdate) {
             // Unauthorized update - skip all questions
@@ -423,8 +487,44 @@ export async function runRegister() {
             requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
             
             if (requiresApiKey) {
-                authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
-                authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                if (introspectionResult.isManual) {
+                    // For manual registration, ask about auth type
+                    const authType = await askQuestion(rl, 'Authentication type (oauth/api-key/custom) [oauth]: ') || 'oauth';
+                    authInfo.type = authType;
+                    
+                    if (authType === 'oauth') {
+                        authInfo.authInstructions = await askQuestion(rl, 'OAuth instructions (e.g., how to authenticate): ') || 'OAuth authentication required';
+                    } else if (authType === 'api-key') {
+                        authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key: ');
+                        authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                    } else {
+                        authInfo.authInstructions = await askQuestion(rl, 'Authentication instructions: ') || 'Custom authentication required';
+                    }
+                    
+                    // For manual registration, ask about capabilities
+                    console.log(chalk.yellow('\nSince we couldn\'t introspect the server, please provide capability details:'));
+                    const hasTools = await askQuestion(rl, 'Does this server provide tools? (y/n): ');
+                    const hasResources = await askQuestion(rl, 'Does this server provide resources? (y/n): ');
+                    const hasPrompts = await askQuestion(rl, 'Does this server provide prompts? (y/n): ');
+                    
+                    // Create placeholder capabilities
+                    if (hasTools.toLowerCase() === 'y') {
+                        introspectionResult.capabilities.tools = {};
+                        introspectionResult.tools = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                    }
+                    if (hasResources.toLowerCase() === 'y') {
+                        introspectionResult.capabilities.resources = {};
+                        introspectionResult.resources = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                    }
+                    if (hasPrompts.toLowerCase() === 'y') {
+                        introspectionResult.capabilities.prompts = {};
+                        introspectionResult.prompts = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                    }
+                } else {
+                    // Regular auth for introspected servers
+                    authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
+                    authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                }
             }
         }
         
