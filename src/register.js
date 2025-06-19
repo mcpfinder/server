@@ -24,10 +24,20 @@ function createPromptInterface() {
 // Function to ask a question and get the answer
 function askQuestion(rl, query) {
     return new Promise((resolve, reject) => {
+        // Ensure the readline is in the correct state
+        rl.resume();
+        
         // Set a timeout to prevent hanging
         const timeout = setTimeout(() => {
+            rl.pause();
             reject(new Error('Input timeout - no response received'));
         }, 60000); // 60 second timeout
+        
+        // Clear any pending input
+        if (rl.line) {
+            rl.line = '';
+            rl.cursor = 0;
+        }
         
         rl.question(query, (answer) => {
             clearTimeout(timeout);
@@ -271,14 +281,18 @@ export async function runRegister() {
     
     // Ensure stdin doesn't close prematurely
     process.stdin.resume();
-    process.stdin.setRawMode?.(false);
+    // Ensure we're not in raw mode which can interfere with readline
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+        process.stdin.setRawMode(false);
+    }
     
     const rl = createPromptInterface();
     
-    // Add line event listener as backup for paste issues
-    rl.on('line', (input) => {
-        console.log(chalk.dim(`Debug: Line event received: '${input}'`));
-    });
+    // Set encoding to handle paste properly
+    rl.input.setEncoding('utf8');
+    
+    // Remove any existing line event listeners to prevent issues
+    rl.removeAllListeners('line');
     let tempDir = null;
     
     try {
@@ -288,11 +302,18 @@ export async function runRegister() {
         
         while (!introspectionResult || !introspectionResult.isValid) {
             // Ask for package name/URL
+            packageOrUrl = ''; // Reset before asking
             while (!isValidPackageNameOrUrl(packageOrUrl)) {
-                packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
-                console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`));
-                if (!isValidPackageNameOrUrl(packageOrUrl)) {
-                    console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+                try {
+                    packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
+                    console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`));
+                    if (!isValidPackageNameOrUrl(packageOrUrl)) {
+                        console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+                        packageOrUrl = ''; // Reset to continue loop
+                    }
+                } catch (err) {
+                    console.error(chalk.red('Error reading input:', err.message));
+                    packageOrUrl = ''; // Reset to continue loop
                 }
             }
             
@@ -316,6 +337,8 @@ export async function runRegister() {
                     spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
                     console.log(chalk.yellow('Please try a different package or URL.\n'));
                     packageOrUrl = ''; // Reset to ask again
+                    // Give readline time to recover after spinner output
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 } else {
                     spinner.succeed('Successfully connected to MCP server');
                 }
@@ -325,6 +348,8 @@ export async function runRegister() {
                 console.log(chalk.yellow('Please try a different package or URL.\n'));
                 packageOrUrl = ''; // Reset to ask again
                 introspectionResult = null; // Reset to continue loop
+                // Give readline time to recover after spinner output
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
