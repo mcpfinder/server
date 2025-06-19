@@ -120,7 +120,7 @@ const GetServerDetailsInput = z.object({
 // Union schema to ensure either client_type or config_file_path is provided, but not both.
 const ClientIdentifierSchema = z.union([
   z.object({
-    client_type: z.string().describe("The type or name of the client application (e.g., 'cursor', 'claude', 'windsurf', 'claude-code')."),
+    client_type: z.string().describe("The type or name of the client application (e.g., 'cursor', 'claude', 'windsurf', 'claude-code', 'codex')."),
     config_file_path: z.undefined(),
   }),
   z.object({
@@ -583,20 +583,32 @@ async function add_mcp_server_config(input) {
   }
 
   try {
-    const config = await readConfigFile(resolvedPath);
-
-    // Determine which key to use for server entries: prefer 'mcpServers', else 'servers'
-    const serversKey = config.hasOwnProperty('mcpServers')
-        ? 'mcpServers'
-        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
-    if (!config[serversKey]) {
-        config[serversKey] = {};
+    // Handle TOML files (Codex) differently
+    const isTomlFile = resolvedPath.endsWith('.toml');
+    let config;
+    
+    if (isTomlFile) {
+      config = await readTomlConfigFile(resolvedPath);
+      // For TOML, use 'mcp_servers' as the key (Codex requirement)
+      if (!config.mcp_servers) {
+        config.mcp_servers = {};
+      }
+      // Add or update the server entry using the generated key
+      config.mcp_servers[configKey] = finalDefinition;
+      await writeTomlConfigFile(resolvedPath, config);
+    } else {
+      config = await readConfigFile(resolvedPath);
+      // Determine which key to use for server entries: prefer 'mcpServers', else 'servers'
+      const serversKey = config.hasOwnProperty('mcpServers')
+          ? 'mcpServers'
+          : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
+      if (!config[serversKey]) {
+          config[serversKey] = {};
+      }
+      // Add or update the server entry using the generated key
+      config[serversKey][configKey] = finalDefinition;
+      await writeConfigFile(resolvedPath, config);
     }
-
-    // Add or update the server entry using the generated key
-    config[serversKey][configKey] = finalDefinition;
-
-    await writeConfigFile(resolvedPath, config);
 
     let successMessage = `Successfully added/updated server '${server_id}' (using config key name: '${configKey}') in ${resolvedPath}.`;
     if (client_type === 'claude' || config_file_path) {
@@ -744,20 +756,34 @@ async function remove_mcp_server_config(input) {
     configPath = await resolveAndValidateConfigPath(client_type, config_file_path);
 
     const keyToRemove = server_id;
-    const config = await readConfigFile(configPath);
-
-    // Determine which key to use for server entries
-    const serversKey = config.hasOwnProperty('mcpServers')
-        ? 'mcpServers'
-        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
+    const isTomlFile = configPath.endsWith('.toml');
+    let config;
     let removed = false;
-    if (config[serversKey]?.[keyToRemove]) { // Check existence safely using the provided ID
-      console.error(`[remove_mcp_server_config] Removing server with name '${keyToRemove}' from key '${serversKey}' in ${configPath}...`);
-      delete config[serversKey][keyToRemove];
-      removed = true;
-      await writeConfigFile(configPath, config);
+
+    if (isTomlFile) {
+      config = await readTomlConfigFile(configPath);
+      if (config.mcp_servers?.[keyToRemove]) {
+        console.error(`[remove_mcp_server_config] Removing server with name '${keyToRemove}' from key 'mcp_servers' in ${configPath}...`);
+        delete config.mcp_servers[keyToRemove];
+        removed = true;
+        await writeTomlConfigFile(configPath, config);
+      } else {
+        console.warn(`[remove_mcp_server_config] Server with name '${keyToRemove}' not found in ${configPath}. No changes needed.`);
+      }
     } else {
-      console.warn(`[remove_mcp_server_config] Server with name '${keyToRemove}' not found in ${configPath}. No changes needed.`);
+      config = await readConfigFile(configPath);
+      // Determine which key to use for server entries
+      const serversKey = config.hasOwnProperty('mcpServers')
+          ? 'mcpServers'
+          : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
+      if (config[serversKey]?.[keyToRemove]) { // Check existence safely using the provided ID
+        console.error(`[remove_mcp_server_config] Removing server with name '${keyToRemove}' from key '${serversKey}' in ${configPath}...`);
+        delete config[serversKey][keyToRemove];
+        removed = true;
+        await writeConfigFile(configPath, config);
+      } else {
+        console.warn(`[remove_mcp_server_config] Server with name '${keyToRemove}' not found in ${configPath}. No changes needed.`);
+      }
     }
 
     const resultMessage = removed
@@ -800,11 +826,11 @@ const GetMcpServerDetailsTool = {
 
 const AddMcpServerConfigTool = {
   name: 'add_mcp_server_config',
-  description: "Enables capabilities (e.g., tools, features) from a specific MCP server/tool. Add or update its configuration in the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code) using server_id obtained from search_mcp_servers results. Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
+  description: "Enables capabilities (e.g., tools, features) from a specific MCP server/tool. Add or update its configuration in the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code, Codex) using server_id obtained from search_mcp_servers results. Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code', 'codex'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "A unique MCPFinder ID of the MCP server received from search_mcp_servers." },
       mcp_definition: {
@@ -824,11 +850,11 @@ const AddMcpServerConfigTool = {
 
 const RemoveMcpServerConfigTool = {
   name: 'remove_mcp_server_config',
-  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code). Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
+  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code, Codex). Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code', 'codex'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "The unique MCP server identifier (config key name) of the server configuration entry to remove." },
       claude_path: { type: "string", description: "Full path to claude executable (only used for claude-code client_type when claude command is not in PATH)." }

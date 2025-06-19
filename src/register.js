@@ -154,6 +154,10 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
     let client;
     let originalFetch = null;
     
+    if (authToken) {
+        console.log(chalk.dim(`Debug: Auth token provided (length: ${authToken.length})...`));
+    }
+    
     try {
         if (isUrl) {
             const url = new URL(packageOrUrl);
@@ -226,6 +230,7 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                         ...options.headers,
                         'Authorization': `Bearer ${authToken}`
                     };
+                    console.log(chalk.dim(`Debug: Added auth header to request to ${url}`));
                 }
                 return originalFetch(url, options);
             };
@@ -257,6 +262,7 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                                 token_type: 'Bearer'
                             })
                         };
+                        console.log(chalk.dim('Debug: Re-applied auth provider to HTTP transport'));
                     }
                     await client.connect(transport);
                 }
@@ -306,6 +312,9 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         
     } catch (error) {
         // Introspection error already shown in main flow
+        if (authToken) {
+            console.log(chalk.dim(`Debug: Introspection error with auth: ${error.message}`));
+        }
         return {
             isValid: false,
             error: error.message || 'Unknown error'
