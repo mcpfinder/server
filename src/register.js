@@ -341,6 +341,26 @@ export async function runRegister() {
             }
         }
         
+        // Check if this server already exists (for unverified updates)
+        const hasSecret = !!process.env.MCP_REGISTRY_SECRET;
+        let isUpdate = false;
+        
+        // Check if URL already exists in registry
+        if (!hasSecret) {
+            try {
+                const checkResponse = await fetch(`${process.env.MCPFINDER_API_URL || 'https://mcpfinder.dev'}/api/v1/search?q=${encodeURIComponent(packageOrUrl)}&limit=1`);
+                if (checkResponse.ok) {
+                    const searchResult = await checkResponse.json();
+                    if (searchResult.tools && searchResult.tools.length > 0 && searchResult.tools[0].url === packageOrUrl) {
+                        isUpdate = true;
+                        console.log(chalk.yellow('\n⚠️  This server is already registered. Updating capabilities only...'));
+                    }
+                }
+            } catch (e) {
+                // Ignore search errors, proceed as new registration
+            }
+        }
+        
         // Display discovered capabilities
         console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
         console.log(`${chalk.bold('Server:')} ${introspectionResult.serverInfo?.name || 'Unknown'}`);
@@ -362,42 +382,49 @@ export async function runRegister() {
         // Add a small delay to ensure output is flushed
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Collect additional information
-        // Ensure readline is still active
-        if (!rl) {
-            console.error(chalk.red('\nError: Readline interface was closed unexpectedly'));
-            throw new Error('Readline interface closed');
-        }
-        const defaultDescription = introspectionResult.serverInfo?.description || '';
-        const descriptionPrompt = defaultDescription 
-            ? `\nProvide a brief description of your MCP server [${defaultDescription}]: `
-            : '\nProvide a brief description of your MCP server: ';
+        // Collect additional information (skip for unauthorized updates)
+        let description, tags = [], requiresApiKey = false, authInfo = {};
         
-        let description;
-        try {
-            description = await askQuestion(rl, descriptionPrompt);
-            if (!description) description = defaultDescription;
-        } catch (questionError) {
-            console.error(chalk.red('\nError reading input:', questionError.message));
-            throw questionError;
-        }
-        
-        let tagsInput, requiresApiKeyAnswer;
-        try {
-            tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
-            requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
-        } catch (questionError) {
-            console.error(chalk.red('\nError reading input:', questionError.message));
-            throw questionError;
-        }
-        
-        const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
-        const requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
-        
-        let authInfo = {};
-        if (requiresApiKey) {
-            authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
-            authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+        if (!hasSecret && isUpdate) {
+            // Unauthorized update - skip all questions
+            console.log(chalk.dim('\nSkipping questions for unauthorized update...'));
+            description = introspectionResult.serverInfo?.description || `MCP server: ${packageOrUrl}`;
+        } else {
+            // New registration or authorized update - ask all questions
+            // Ensure readline is still active
+            if (!rl) {
+                console.error(chalk.red('\nError: Readline interface was closed unexpectedly'));
+                throw new Error('Readline interface closed');
+            }
+            const defaultDescription = introspectionResult.serverInfo?.description || '';
+            const descriptionPrompt = defaultDescription 
+                ? `\nProvide a brief description of your MCP server [${defaultDescription}]: `
+                : '\nProvide a brief description of your MCP server: ';
+            
+            try {
+                description = await askQuestion(rl, descriptionPrompt);
+                if (!description) description = defaultDescription;
+            } catch (questionError) {
+                console.error(chalk.red('\nError reading input:', questionError.message));
+                throw questionError;
+            }
+            
+            let tagsInput, requiresApiKeyAnswer;
+            try {
+                tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
+                requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
+            } catch (questionError) {
+                console.error(chalk.red('\nError reading input:', questionError.message));
+                throw questionError;
+            }
+            
+            tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
+            requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
+            
+            if (requiresApiKey) {
+                authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
+                authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+            }
         }
         
         // Generate manifest
@@ -408,15 +435,20 @@ export async function runRegister() {
             ...authInfo
         });
         
-        // Show manifest preview
-        console.log(chalk.cyan('\n📄 Generated Manifest:\n'));
-        console.log(chalk.gray(JSON.stringify(manifest, null, 2)));
-        
-        // Confirm submission
-        const confirmAnswer = await askQuestion(rl, '\nSubmit this manifest to MCPfinder registry? (y/n): ');
-        if (confirmAnswer.toLowerCase() !== 'y') {
-            console.log(chalk.yellow('\nRegistration cancelled'));
-            return;
+        // For unauthorized updates, skip manifest preview and confirmation
+        if (!hasSecret && isUpdate) {
+            console.log(chalk.dim('\nSubmitting capability updates...'));
+        } else {
+            // Show manifest preview
+            console.log(chalk.cyan('\n📄 Generated Manifest:\n'));
+            console.log(chalk.gray(JSON.stringify(manifest, null, 2)));
+            
+            // Confirm submission
+            const confirmAnswer = await askQuestion(rl, '\nSubmit this manifest to MCPfinder registry? (y/n): ');
+            if (confirmAnswer.toLowerCase() !== 'y') {
+                console.log(chalk.yellow('\nRegistration cancelled'));
+                return;
+            }
         }
         
         // Submit to registry
@@ -430,6 +462,10 @@ export async function runRegister() {
             
             if (hasSecret) {
                 console.log(chalk.green('\n✅ Your MCP server has been registered and verified!'));
+            } else if (result.operation === 'updated') {
+                console.log(chalk.green('\n✅ Successfully updated capabilities!'));
+                console.log(chalk.dim('Note: Only tools/capabilities were updated.'));
+                console.log(chalk.dim('Name, description, and tags remain unchanged.'));
             } else {
                 console.log(chalk.yellow('\n⚠️  Your MCP server has been registered (unverified)'));
                 console.log(chalk.dim('Note: This registration is unverified. To get verified status,'));
@@ -438,8 +474,7 @@ export async function runRegister() {
             
             console.log(`${chalk.bold('ID:')} ${result.id}`);
             console.log(`${chalk.bold('Name:')} ${manifest.name}`);
-            console.log(`${chalk.bold('Operation:')} ${result.operation || 'created'}`);
-            console.log(`\nView your server at: ${chalk.cyan(`https://mcpfinder.dev/tools/${result.id}`)}`);
+            console.log(`${chalk.bold('Operation:')} ${result.operation || 'created'}`)
             
         } catch (submitError) {
             console.log(chalk.red('❌ Registration failed'));
