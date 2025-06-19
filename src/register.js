@@ -290,7 +290,7 @@ export async function runRegister() {
             // Ask for package name/URL
             while (!isValidPackageNameOrUrl(packageOrUrl)) {
                 packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
-                console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`);
+                console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`));
                 if (!isValidPackageNameOrUrl(packageOrUrl)) {
                     console.log(chalk.red('Invalid package name or URL format. Please try again.'));
                 }
