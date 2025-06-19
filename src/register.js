@@ -334,18 +334,25 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                 const mcpRemoteTempDir = tempDir || mkdtempSync(join(tmpdir(), 'mcp-remote-'));
                 
                 // Use mcp-remote as stdio transport
+                // mcp-remote handles OAuth authentication automatically
                 const mcpRemoteTransport = new StdioClientTransport({
                     command: 'npx',
                     args: ['mcp-remote', packageOrUrl],
                     env: {
                         ...process.env,
-                        ...(authToken ? { MCP_AUTH_TOKEN: authToken } : {})
+                        // Try different auth token environment variables
+                        ...(authToken ? { 
+                            MCP_AUTH_TOKEN: authToken,
+                            AUTH_TOKEN: authToken,
+                            BEARER_TOKEN: authToken,
+                            TOKEN: authToken
+                        } : {})
                     },
                     stderr: 'pipe',
                     cwd: mcpRemoteTempDir
                 });
                 
-                const mcpRemoteClient = new Client(clientOptions);
+                const mcpRemoteClient = new Client({ name: 'mcpfinder-register', version: '1.0.0' });
                 await mcpRemoteClient.connect(mcpRemoteTransport);
                 
                 // Get server info and capabilities
@@ -386,6 +393,7 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
             } catch (mcpRemoteError) {
                 // mcp-remote also failed
                 console.log(chalk.red('❌ mcp-remote connection also failed'));
+                console.log(chalk.dim(`mcp-remote error: ${mcpRemoteError.message}`));
             }
         }
         
