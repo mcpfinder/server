@@ -215,7 +215,11 @@ async function get_mcp_server_details(input) {
     let hintConstructionError = null;
     // Attempt to generate installation hints
     try {
-        if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+        if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
+             // HTTP/SSE server - use mcp-remote wrapper
+             installationDetails.command = ['npx', 'mcp-remote', manifest.url];
+        } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+             // NPM package
              installationDetails.command = ['npx', '-y', manifest.url];
         }
         if (manifest.auth && manifest.auth.type === 'api-key') {
@@ -392,9 +396,14 @@ async function add_mcp_server_config(input) {
     // Fetching is already done above, manifest variable is available
     try {
       let defaultCommand = [];
-      // If the URL exists and doesn't look like http:// or https://, assume it's a package name
-      if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+      // If the URL exists and looks like http:// or https://, use mcp-remote wrapper
+      if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
+        defaultCommand = ['npx', 'mcp-remote', manifest.url];
+        console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(defaultCommand)}`);
+      } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+        // If the URL exists and doesn't look like http:// or https://, assume it's a package name
         defaultCommand = ['npx', '-y', manifest.url];
+        console.error(`[add_mcp_server_config] NPM package detected: ${JSON.stringify(defaultCommand)}`);
       } else {
          console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
       }
@@ -433,6 +442,16 @@ async function add_mcp_server_config(input) {
   if (!finalDefinition.command || finalDefinition.command.length === 0) {
       console.error(`[add_mcp_server_config] Command is still missing for ${server_id}.`);
       return { content: [{ type: 'text', text: `Error: Could not determine command for server ${server_id}. Provide in 'mcp_definition'.` }], isError: true };
+  }
+
+  // Format command array into command and args format for client config files
+  if (Array.isArray(finalDefinition.command) && finalDefinition.command.length > 0) {
+    const commandArray = finalDefinition.command;
+    finalDefinition.command = commandArray[0]; // First element is the command
+    if (commandArray.length > 1) {
+      finalDefinition.args = commandArray.slice(1); // Rest are args
+    }
+    console.error(`[add_mcp_server_config] Formatted command: "${finalDefinition.command}" with args: ${JSON.stringify(finalDefinition.args || [])}`);
   }
 
   try {
