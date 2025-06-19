@@ -10,7 +10,7 @@ import crypto from 'crypto';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
-import ora from 'ora';
+// Removed ora import - using simple console logging instead
 import chalk from 'chalk';
 
 // Function to create a readline interface
@@ -24,19 +24,14 @@ function createPromptInterface() {
 // Function to ask a question and get the answer
 function askQuestion(rl, query) {
     return new Promise((resolve, reject) => {
-        // Ensure the readline is in the correct state
-        rl.resume();
-        
         // Set a timeout to prevent hanging
         const timeout = setTimeout(() => {
-            rl.pause();
             reject(new Error('Input timeout - no response received'));
         }, 60000); // 60 second timeout
         
-        // Clear any pending input
-        if (rl.line) {
-            rl.line = '';
-            rl.cursor = 0;
+        // Clear any pending input buffer
+        if (rl._line_buffer) {
+            rl._line_buffer = '';
         }
         
         rl.question(query, (answer) => {
@@ -321,7 +316,7 @@ export async function runRegister() {
             const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
             
             // Introspect the MCP server
-            const spinner = ora('Connecting to MCP server and verifying capabilities...').start();
+            console.log(chalk.blue('\n⏳ Connecting to MCP server and verifying capabilities...'));
             
             try {
                 if (tempDir) {
@@ -334,22 +329,18 @@ export async function runRegister() {
                 introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
                 
                 if (!introspectionResult.isValid) {
-                    spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
+                    console.log(chalk.red(`❌ Not a valid MCP server: ${introspectionResult.error}`));
                     console.log(chalk.yellow('Please try a different package or URL.\n'));
                     packageOrUrl = ''; // Reset to ask again
-                    // Give readline time to recover after spinner output
-                    await new Promise(resolve => setTimeout(resolve, 100));
                 } else {
-                    spinner.succeed('Successfully connected to MCP server');
+                    console.log(chalk.green('✅ Successfully connected to MCP server'));
                 }
             } catch (introspectError) {
-                spinner.fail(`Failed to introspect: ${introspectError.message}`);
+                console.log(chalk.red(`❌ Failed to introspect: ${introspectError.message}`));
                 console.error(chalk.dim('Debug: Full error:', introspectError));
                 console.log(chalk.yellow('Please try a different package or URL.\n'));
                 packageOrUrl = ''; // Reset to ask again
                 introspectionResult = null; // Reset to continue loop
-                // Give readline time to recover after spinner output
-                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
         
@@ -432,11 +423,11 @@ export async function runRegister() {
         }
         
         // Submit to registry
-        const submitSpinner = ora('Submitting to MCPfinder registry...').start();
+        console.log(chalk.blue('\n⏳ Submitting to MCPfinder registry...'));
         
         try {
             const result = await submitToRegistry(manifest);
-            submitSpinner.succeed('Successfully registered!');
+            console.log(chalk.green('✅ Successfully registered!'));
             
             console.log(chalk.green('\n✅ Your MCP server has been registered!'));
             console.log(`${chalk.bold('ID:')} ${result.id}`);
@@ -444,7 +435,7 @@ export async function runRegister() {
             console.log(`\nView your server at: ${chalk.cyan(`https://mcpfinder.dev/tools/${result.id}`)}`);
             
         } catch (submitError) {
-            submitSpinner.fail('Registration failed');
+            console.log(chalk.red('❌ Registration failed'));
             
             if (submitError.message.includes('MCP_REGISTRY_SECRET')) {
                 console.error(chalk.red('\n❌ Authentication required'));
