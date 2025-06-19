@@ -154,9 +154,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
     let client;
     let originalFetch = null;
     
-    if (authToken) {
-        console.log(chalk.dim(`Debug: Auth token provided (length: ${authToken.length})...`));
-    }
     
     try {
         if (isUrl) {
@@ -182,7 +179,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                     if (contentType && contentType.includes('text/event-stream')) {
                         // It's an SSE endpoint
                         transport = new SSEClientTransport(url);
-                        
                     } else {
                         // Use StreamableHTTP transport for modern HTTP endpoints
                         transport = new StreamableHTTPClientTransport(url);
@@ -230,7 +226,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                         ...options.headers,
                         'Authorization': `Bearer ${authToken}`
                     };
-                    console.log(chalk.dim(`Debug: Added auth header to request to ${url}`));
                 }
                 return originalFetch(url, options);
             };
@@ -239,7 +234,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         client = new Client(clientOptions);
         
         try {
-            console.log(chalk.dim('Connecting to MCP server...'));
             
             // For SSE transports, add a timeout since some servers send non-standard keepalives
             if (transport.constructor.name === 'SSEClientTransport') {
@@ -253,8 +247,16 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                 } catch (sseError) {
                     console.log(chalk.dim('SSE connection failed, trying HTTP transport...'));
                     // Try HTTP transport as fallback
-                    await transport.close();
+                    try {
+                        await transport.close();
+                    } catch (e) {
+                        // Ignore close errors
+                    }
+                    
+                    // Create a new client for the HTTP transport
+                    client = new Client(clientOptions);
                     transport = new StreamableHTTPClientTransport(new URL(packageOrUrl));
+                    
                     if (authToken) {
                         transport._authProvider = {
                             tokens: async () => ({
@@ -262,15 +264,14 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                                 token_type: 'Bearer'
                             })
                         };
-                        console.log(chalk.dim('Debug: Re-applied auth provider to HTTP transport'));
                     }
+                    
                     await client.connect(transport);
                 }
             } else {
                 await client.connect(transport);
             }
             
-            console.log(chalk.dim('Connected successfully'));
         } catch (connectError) {
             // Restore fetch before throwing
             if (originalFetch) {
@@ -312,9 +313,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         
     } catch (error) {
         // Introspection error already shown in main flow
-        if (authToken) {
-            console.log(chalk.dim(`Debug: Introspection error with auth: ${error.message}`));
-        }
         return {
             isValid: false,
             error: error.message || 'Unknown error'
