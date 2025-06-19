@@ -144,6 +144,22 @@ async function findConfigPath(rl, selectedClient, platform) {
 }
 
 async function updateConfigFile(filePath, clientTool) {
+    // Special handling for Claude Code - use claude mcp add command
+    if (clientTool && clientTool.toLowerCase().includes('claude code')) {
+        console.log('\n🎉 For Claude Code, use this command to add MCPfinder:');
+        console.log('');
+        console.log('   claude mcp add mcpfinder-stdio npx @mcpfinder/server');
+        console.log('');
+        console.log('Or for HTTP/SSE transport:');
+        console.log('');
+        console.log('   claude mcp add mcpfinder-http https://mcpfinder.dev/mcp');
+        console.log('');
+        console.log('Then test the connection with:');
+        console.log('   claude mcp test mcpfinder-stdio');
+        console.log('');
+        return;
+    }
+
     let config = {};
     let configKey = 'mcpServers'; // Default key
 
