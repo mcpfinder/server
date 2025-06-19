@@ -152,6 +152,7 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
     let transport;
     let client;
+    let originalFetch = null;
     
     try {
         if (isUrl) {
@@ -180,18 +181,46 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
         // Connect to the MCP server
         const clientOptions = { name: 'mcpfinder-register', version: '1.0.0' };
         
+        // Store original fetch for cleanup
+        let originalFetch = null;
+        
         // Add auth token if provided
         if (authToken && isUrl) {
-            // For HTTP transports, we need to pass auth in the transport options
-            // This is a simplified approach - actual implementation may vary
-            transport._authProvider = () => ({ 
-                type: 'bearer',
-                token: authToken 
-            });
+            // Create auth provider for OAuth-style authentication
+            transport._authProvider = {
+                tokens: async () => ({
+                    access_token: authToken,
+                    token_type: 'Bearer'
+                })
+            };
+            
+            // Override the global fetch to add Authorization header as fallback
+            originalFetch = global.fetch;
+            
+            // Replace global fetch temporarily
+            global.fetch = async (url, options = {}) => {
+                // Only add auth header for requests to the MCP server
+                if (url.toString().startsWith(packageOrUrl)) {
+                    options.headers = {
+                        ...options.headers,
+                        'Authorization': `Bearer ${authToken}`
+                    };
+                }
+                return originalFetch(url, options);
+            };
         }
         
         client = new Client(clientOptions);
-        await client.connect(transport);
+        
+        try {
+            await client.connect(transport);
+        } catch (connectError) {
+            // Restore fetch before throwing
+            if (originalFetch) {
+                global.fetch = originalFetch;
+            }
+            throw connectError;
+        }
         
         // List available tools - this is the primary MCP viability test
         const toolsResult = await client.listTools();
@@ -246,6 +275,11 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
             }
         } catch (e) {
             console.error(chalk.dim('Debug: Error closing transport:', e.message));
+        }
+        
+        // Restore original fetch if it was overridden
+        if (originalFetch) {
+            global.fetch = originalFetch;
         }
     }
 }
