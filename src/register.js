@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StreamableHttpClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import crypto from 'crypto';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync } from 'fs';
@@ -83,8 +83,8 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
                 // Use SSE transport for legacy SSE endpoints
                 transport = new SSEClientTransport(url);
             } else {
-                // Use StreamableHttp transport for modern HTTP endpoints
-                transport = new StreamableHttpClientTransport(url);
+                // Use StreamableHTTP transport for modern HTTP endpoints
+                transport = new StreamableHTTPClientTransport(url);
             }
         } else {
             // STDIO transport for npm packages
