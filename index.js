@@ -32,18 +32,26 @@ MCPfinder
 Manages local MCP configurations for clients like Cursor and Claude.
 Communicates with the MCPFinder Registry API (https://mcpfinder.dev/api).
 
-Usage: node index.js [options] [command]
+Available as both stdio and HTTP/SSE transport variants:
+- Stdio transport: For direct integration with local AI clients
+- HTTP/SSE transport: For web-accessible deployment (SSE endpoint available at https://mcpfinder.dev/mcp)
+
+Local usage: node index.js [options] [command]
 
 Commands:
-  (no command)      Run the server (default)
+  (no command)      Run the server (default: stdio transport)
   install           For users and AI clients: Run the interactive setup to configure a client
-  register          For server publishers: Register your MCP server package with the MCPFinder registry
+  register          For server publishers: Register your MCP server package with the MCPFinder registry (beta)
 
 Options (for running the server):
-  --http            Run the server in HTTP mode. Default is Stdio mode.
+  --http            Run the server locally in HTTP mode with SSE support. Default is stdio transport.
   --port <number>   Port for HTTP mode (overrides MCP_PORT env var). Default: ${DEFAULT_PORT}
   --api-url <url>   URL of the MCP Finder Registry API (overrides MCPFINDER_API_URL env var). Default: ${DEFAULT_API_URL}
   --help            Display this help message.
+
+Transport Options:
+  Stdio (default)   Direct JSON-RPC communication for local AI clients
+  HTTP with SSE     Web-accessible endpoint supporting both HTTP and Server-Sent Events
 
 Environment Variables:
   MCP_PORT           Port for HTTP mode (default: ${DEFAULT_PORT}).
@@ -140,6 +148,12 @@ const AddServerConfigInput = z.object({
 const RemoveServerConfigInput = z.object({
   server_id: z.string().describe("The unique identifier of the server configuration entry to remove."),
 }).and(ClientIdentifierSchema);
+
+const StreamMcpEventsInput = z.object({
+  duration: z.number().optional().describe("Duration in seconds to stream events (default: 30, max: 120)."),
+  filter: z.array(z.string()).optional().describe("Event types to filter: tool.registered, tool.updated, tool.status_changed."),
+  since: z.string().optional().describe("ISO timestamp to get events from (default: 1 hour ago)."),
+});
 
 // --- Tool Implementations ---
 
@@ -465,6 +479,83 @@ async function add_mcp_server_config(input) {
   }
 }
 
+async function stream_mcp_events(input) {
+  const duration = Math.min(input.duration || 30, 120) * 1000; // Convert to ms, max 2 minutes
+  const filter = input.filter || [];
+  const since = input.since || new Date(Date.now() - 3600000).toISOString();
+  
+  const eventUrl = new URL(`${globalApiUrl}/api/v1/events`);
+  if (filter.length > 0) {
+    eventUrl.searchParams.set('filter', filter.join(','));
+  }
+  eventUrl.searchParams.set('since', since);
+  
+  console.error(`[stream_mcp_events] Connecting to SSE: ${eventUrl.toString()}`);
+  
+  const events = [];
+  const startTime = Date.now();
+  
+  return new Promise((resolve, reject) => {
+    // Import EventSource dynamically
+    import('eventsource').then(({ default: EventSource }) => {
+      const eventSource = new EventSource(eventUrl.toString());
+      
+      const cleanup = () => {
+        eventSource.close();
+      };
+      
+      // Set timeout for duration
+      const timeout = setTimeout(() => {
+        cleanup();
+        const summary = `Monitored events for ${Math.floor((Date.now() - startTime) / 1000)} seconds.\nReceived ${events.length} events.\n\nLatest events:\n` +
+          events.slice(-5).map(e => `- ${e.timestamp}: ${e.type} - ${e.data.name}`).join('\n');
+        resolve({ content: [{ type: 'text', text: summary }] });
+      }, duration);
+      
+      eventSource.onopen = () => {
+        console.error('[stream_mcp_events] SSE connection opened');
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('[stream_mcp_events] SSE error:', error);
+        clearTimeout(timeout);
+        cleanup();
+        reject({ content: [{ type: 'text', text: `Error streaming events: ${error.message || 'Connection failed'}` }], isError: true });
+      };
+      
+      // Handle specific event types
+      const eventTypes = ['tool.registered', 'tool.updated', 'tool.status_changed', 'tool.health_checked'];
+      eventTypes.forEach(eventType => {
+        eventSource.addEventListener(eventType, (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (filter.length === 0 || filter.includes(eventType)) {
+              events.push(data);
+              console.error(`[stream_mcp_events] Received ${eventType} event:`, data.data.name);
+            }
+          } catch (e) {
+            console.error(`[stream_mcp_events] Error parsing event data:`, e);
+          }
+        });
+      });
+      
+      // Handle connection close
+      eventSource.addEventListener('close', (event) => {
+        console.error('[stream_mcp_events] Server closed connection');
+        clearTimeout(timeout);
+        cleanup();
+        const summary = `Connection closed by server.\nMonitored for ${Math.floor((Date.now() - startTime) / 1000)} seconds.\nReceived ${events.length} events.\n\nLatest events:\n` +
+          events.slice(-5).map(e => `- ${e.timestamp}: ${e.type} - ${e.data.name}`).join('\n');
+        resolve({ content: [{ type: 'text', text: summary }] });
+      });
+    }).catch(importError => {
+      console.error('[stream_mcp_events] Failed to import EventSource:', importError);
+      // Fallback to simple fetch if EventSource is not available
+      resolve({ content: [{ type: 'text', text: 'SSE monitoring requires the eventsource package. Install it with: npm install eventsource' }] });
+    });
+  });
+}
+
 async function remove_mcp_server_config(input) {
   const { server_id, client_type, config_file_path } = input;
   let configPath;
@@ -564,11 +655,26 @@ const RemoveMcpServerConfigTool = {
   }
 };
 
+const StreamMcpEventsTool = {
+  name: 'stream_mcp_events',
+  description: 'Monitor real-time events from the MCPfinder registry including new tool registrations, updates, and status changes. Returns a summary of events received during the monitoring period.',
+  inputSchema: {
+    type: "object",
+    properties: {
+      duration: { type: "number", description: "Duration in seconds to stream events (default: 30, max: 120)." },
+      filter: { type: "array", items: { type: "string" }, description: "Event types to filter: tool.registered, tool.updated, tool.status_changed." },
+      since: { type: "string", description: "ISO timestamp to get events from (default: 1 hour ago)." }
+    },
+    required: []
+  }
+};
+
 const allTools = [
   SearchMcpServersTool,
   GetMcpServerDetailsTool,
   AddMcpServerConfigTool,
   RemoveMcpServerConfigTool,
+  StreamMcpEventsTool,
 ];
 
 // --- MCP Server Instance Creation (Common) ---
@@ -594,6 +700,7 @@ function setupRequestHandlers(server) {
       get_mcp_server_details: GetServerDetailsInput,
       add_mcp_server_config: AddServerConfigInput,
       remove_mcp_server_config: RemoveServerConfigInput,
+      stream_mcp_events: StreamMcpEventsInput,
     };
 
     // Handlers map
@@ -602,6 +709,7 @@ function setupRequestHandlers(server) {
       get_mcp_server_details,
       add_mcp_server_config,
       remove_mcp_server_config,
+      stream_mcp_events,
     };
 
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
@@ -638,6 +746,8 @@ function setupRequestHandlers(server) {
 
 // --- Stdio Mode Start Function ---
 async function startStdioServer(apiUrl) {
+    console.error("MCPfinder - Use --help to see all transport options and commands");
+    console.error("");
     console.error("Initializing MCP Finder Server in Stdio mode...");
     serverInstance = createServerInstance(apiUrl);
     setupRequestHandlers(serverInstance);
