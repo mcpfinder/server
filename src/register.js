@@ -437,7 +437,8 @@ export async function runRegister() {
             }
             
             console.log(`${chalk.bold('ID:')} ${result.id}`);
-            console.log(`${chalk.bold('Name:')} ${result.manifest.name}`);
+            console.log(`${chalk.bold('Name:')} ${manifest.name}`);
+            console.log(`${chalk.bold('Operation:')} ${result.operation || 'created'}`);
             console.log(`\nView your server at: ${chalk.cyan(`https://mcpfinder.dev/tools/${result.id}`)}`);
             
         } catch (submitError) {
