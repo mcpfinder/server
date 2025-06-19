@@ -31,10 +31,12 @@ function askQuestion(rl, query) {
         
         rl.question(query, (answer) => {
             clearTimeout(timeout);
-            if (answer === undefined) {
+            const trimmedAnswer = answer ? answer.trim() : answer;
+            console.log(chalk.dim(`Debug: Raw: '${answer}' -> Trimmed: '${trimmedAnswer}' (length: ${answer?.length} -> ${trimmedAnswer?.length})`));
+            if (trimmedAnswer === undefined) {
                 reject(new Error('Input interrupted'));
             } else {
-                resolve(answer);
+                resolve(trimmedAnswer);
             }
         });
     });
@@ -42,6 +44,7 @@ function askQuestion(rl, query) {
 
 // Function to validate package name/URL
 function isValidPackageNameOrUrl(input) {
+    if (!input || typeof input !== 'string') return false;
     const trimmed = input.trim();
     if (!trimmed) return false;
     
@@ -271,6 +274,11 @@ export async function runRegister() {
     process.stdin.setRawMode?.(false);
     
     const rl = createPromptInterface();
+    
+    // Add line event listener as backup for paste issues
+    rl.on('line', (input) => {
+        console.log(chalk.dim(`Debug: Line event received: '${input}'`));
+    });
     let tempDir = null;
     
     try {
@@ -282,6 +290,7 @@ export async function runRegister() {
             // Ask for package name/URL
             while (!isValidPackageNameOrUrl(packageOrUrl)) {
                 packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
+                console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`);
                 if (!isValidPackageNameOrUrl(packageOrUrl)) {
                     console.log(chalk.red('Invalid package name or URL format. Please try again.'));
                 }
