@@ -37,7 +37,7 @@ function askQuestion(rl, query) {
         rl.question(query, (answer) => {
             clearTimeout(timeout);
             const trimmedAnswer = answer ? answer.trim() : answer;
-            console.log(chalk.dim(`Debug: Raw: '${answer}' -> Trimmed: '${trimmedAnswer}' (length: ${answer?.length} -> ${trimmedAnswer?.length})`));
+            // Debug logging removed - flow is working correctly
             if (trimmedAnswer === undefined) {
                 reject(new Error('Input interrupted'));
             } else {
@@ -134,7 +134,7 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
         };
         
     } catch (error) {
-        console.error(chalk.dim('Debug: Introspection error:', error.message));
+        // Introspection error already shown in main flow
         return {
             isValid: false,
             error: error.message || 'Unknown error'
@@ -241,30 +241,27 @@ async function submitToRegistry(manifest) {
     const apiUrl = process.env.MCPFINDER_API_URL || 'https://mcpfinder.dev';
     const secret = process.env.MCP_REGISTRY_SECRET;
     
-    if (!secret) {
-        throw new Error('MCP_REGISTRY_SECRET environment variable is required');
-    }
-    
-    // Create HMAC signature
-    const timestamp = Date.now();
     const payload = JSON.stringify(manifest);
-    const message = `${timestamp}.${payload}`;
-    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    // If secret is provided, add HMAC authentication
+    if (secret) {
+        const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+        headers['Authorization'] = `HMAC ${signature}`;
+    }
     
     const response = await fetch(`${apiUrl}/api/v1/register`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-MCP-Signature': signature,
-            'X-MCP-Timestamp': timestamp.toString()
-        },
+        headers,
         body: payload
     });
     
     const result = await response.json();
     
     if (!response.ok) {
-        throw new Error(result.error || 'Registration failed');
+        throw new Error(result.error || result.message || 'Registration failed');
     }
     
     return result;
@@ -301,7 +298,7 @@ export async function runRegister() {
             while (!isValidPackageNameOrUrl(packageOrUrl)) {
                 try {
                     packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
-                    console.log(chalk.dim(`Debug: Got input: '${packageOrUrl}' (valid: ${isValidPackageNameOrUrl(packageOrUrl)})`));
+                    // Input validation working correctly
                     if (!isValidPackageNameOrUrl(packageOrUrl)) {
                         console.log(chalk.red('Invalid package name or URL format. Please try again.'));
                         packageOrUrl = ''; // Reset to continue loop
@@ -337,7 +334,7 @@ export async function runRegister() {
                 }
             } catch (introspectError) {
                 console.log(chalk.red(`❌ Failed to introspect: ${introspectError.message}`));
-                console.error(chalk.dim('Debug: Full error:', introspectError));
+                // Full error details available if needed
                 console.log(chalk.yellow('Please try a different package or URL.\n'));
                 packageOrUrl = ''; // Reset to ask again
                 introspectionResult = null; // Reset to continue loop
@@ -429,21 +426,23 @@ export async function runRegister() {
             const result = await submitToRegistry(manifest);
             console.log(chalk.green('✅ Successfully registered!'));
             
-            console.log(chalk.green('\n✅ Your MCP server has been registered!'));
+            const hasSecret = !!process.env.MCP_REGISTRY_SECRET;
+            
+            if (hasSecret) {
+                console.log(chalk.green('\n✅ Your MCP server has been registered and verified!'));
+            } else {
+                console.log(chalk.yellow('\n⚠️  Your MCP server has been registered (unverified)'));
+                console.log(chalk.dim('Note: This registration is unverified. To get verified status,'));
+                console.log(chalk.dim('set MCP_REGISTRY_SECRET and register again.'));
+            }
+            
             console.log(`${chalk.bold('ID:')} ${result.id}`);
             console.log(`${chalk.bold('Name:')} ${result.manifest.name}`);
             console.log(`\nView your server at: ${chalk.cyan(`https://mcpfinder.dev/tools/${result.id}`)}`);
             
         } catch (submitError) {
             console.log(chalk.red('❌ Registration failed'));
-            
-            if (submitError.message.includes('MCP_REGISTRY_SECRET')) {
-                console.error(chalk.red('\n❌ Authentication required'));
-                console.log('\nTo register servers, you need to set the MCP_REGISTRY_SECRET environment variable.');
-                console.log('Please contact lucas@mcpfinder.dev to obtain a registration secret.');
-            } else {
-                console.error(chalk.red(`\n❌ Error: ${submitError.message}`));
-            }
+            console.error(chalk.red(`\n❌ Error: ${submitError.message}`));
         }
         
     } catch (error) {
