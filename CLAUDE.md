@@ -51,9 +51,11 @@ When a server requires authentication (returns 401), the tool offers three paths
 
 ### Known Issues
 
-1. **SSE Origin Validation**: Some SSE servers may fail with "Endpoint origin does not match connection origin" if they return mismatched protocols (http vs https). Use manual registration for these servers.
+1. **SSE Origin Validation**: Some SSE servers may fail with "Endpoint origin does not match connection origin" if they return mismatched protocols (http vs https). The tool will automatically retry using mcp-remote as a stdio transport.
 
 2. **Token Format**: The tool expects Bearer tokens. Other authentication methods may require manual registration.
+
+3. **HTTP/SSE Compatibility**: When HTTP or SSE transports fail, the tool automatically falls back to using `npx mcp-remote <url>` as a stdio transport. This ensures compatibility with servers that have transport-specific issues.
 
 ### API Integration
 

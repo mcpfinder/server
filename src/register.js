@@ -312,6 +312,70 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         };
         
     } catch (error) {
+        // If it's a URL and direct connection failed, try via mcp-remote
+        if (isUrl) {
+            console.log(chalk.yellow('\nDirect connection failed. Trying via mcp-remote as stdio transport...'));
+            
+            try {
+                // Create a temp directory for mcp-remote
+                const mcpRemoteTempDir = tempDir || mkdtempSync(join(tmpdir(), 'mcp-remote-'));
+                
+                // Use mcp-remote as stdio transport
+                const mcpRemoteTransport = new StdioClientTransport({
+                    command: 'npx',
+                    args: ['mcp-remote', packageOrUrl],
+                    env: {
+                        ...process.env,
+                        ...(authToken ? { MCP_AUTH_TOKEN: authToken } : {})
+                    },
+                    stderr: 'pipe',
+                    cwd: mcpRemoteTempDir
+                });
+                
+                const mcpRemoteClient = new Client(clientOptions);
+                await mcpRemoteClient.connect(mcpRemoteTransport);
+                
+                // Get server info and capabilities
+                const toolsResult = await mcpRemoteClient.listTools();
+                const tools = toolsResult.tools || [];
+                const serverInfo = mcpRemoteClient.serverInfo || {};
+                const capabilities = mcpRemoteClient.serverCapabilities || {};
+                
+                // List resources if supported
+                let resources = [];
+                if (capabilities?.resources) {
+                    const resourcesResult = await mcpRemoteClient.listResources();
+                    resources = resourcesResult.resources || [];
+                }
+                
+                // List prompts if supported
+                let prompts = [];
+                if (capabilities?.prompts) {
+                    const promptsResult = await mcpRemoteClient.listPrompts();
+                    prompts = promptsResult.prompts || [];
+                }
+                
+                // Clean up
+                await mcpRemoteClient.close();
+                await mcpRemoteTransport.close();
+                
+                console.log(chalk.green('✅ Successfully connected via mcp-remote'));
+                
+                return {
+                    isValid: true,
+                    serverInfo,
+                    capabilities,
+                    tools,
+                    resources,
+                    prompts,
+                    useMcpRemote: true // Flag that this server needs mcp-remote
+                };
+            } catch (mcpRemoteError) {
+                // mcp-remote also failed
+                console.log(chalk.red('❌ mcp-remote connection also failed'));
+            }
+        }
+        
         // Introspection error already shown in main flow
         return {
             isValid: false,
@@ -415,10 +479,18 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
     
     // Determine installation instructions
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
-    const installation = isUrl ? undefined : {
-        command: 'npx',
-        args: ['-y', packageOrUrl]
-    };
+    
+    // If this server needs mcp-remote (failed HTTP/SSE connection), use stdio transport
+    const useMcpRemote = additionalInfo.useMcpRemote;
+    const installation = isUrl ? 
+        (useMcpRemote ? {
+            command: 'npx',
+            args: ['mcp-remote', packageOrUrl]
+        } : undefined) : 
+        {
+            command: 'npx',
+            args: ['-y', packageOrUrl]
+        };
     
     // Determine a good name for the manifest
     let name = serverInfo?.name;
@@ -843,6 +915,7 @@ export async function runRegister() {
             tags,
             requiresApiKey,
             isMinimal: introspectionResult.isMinimal,
+            useMcpRemote: introspectionResult.useMcpRemote,
             ...authInfo
         });
         
