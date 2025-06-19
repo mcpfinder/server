@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as toml from '@iarna/toml';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -145,10 +146,12 @@ const AddServerConfigInput = z.object({
     env: z.record(z.string()).optional().describe("Environment variables required by the server."),
     workingDirectory: z.string().optional().describe("The working directory for the server."),
   }).describe("The MCP server definition object. Optional.").optional(),
+  claude_path: z.string().optional().describe("Full path to claude executable (only used for claude-code client_type when claude command is not in PATH)."),
 }).and(ClientIdentifierSchema);
 
 const RemoveServerConfigInput = z.object({
   server_id: z.string().describe("The unique identifier of the server configuration entry to remove."),
+  claude_path: z.string().optional().describe("Full path to claude executable (only used for claude-code client_type when claude command is not in PATH)."),
 }).and(ClientIdentifierSchema);
 
 const StreamMcpEventsInput = z.object({
@@ -257,7 +260,37 @@ async function get_mcp_server_details(input) {
 
 // --- File Utils ---
 
-async function addMcpServerClaudeCode(server_id, mcp_definition) {
+async function checkClaudeCommandAvailable(claudePath = 'claude') {
+  try {
+    const execAsync = promisify(exec);
+    await execAsync(`${claudePath} --version`);
+    return { available: true, claudePath };
+  } catch (error) {
+    return { 
+      available: false, 
+      error: error.message,
+      claudePath 
+    };
+  }
+}
+
+async function addMcpServerClaudeCode(server_id, mcp_definition, claudePath) {
+  // Check if claude command is available
+  const claudeCheck = await checkClaudeCommandAvailable(claudePath);
+  if (!claudeCheck.available) {
+    const errorMessage = claudePath 
+      ? `Error: Claude CLI command not found at provided path: ${claudePath}\n\nPlease verify the path is correct and the claude executable is accessible.\n\nError details: ${claudeCheck.error}`
+      : `Error: Claude CLI command not found in PATH. Please install Claude Code CLI or provide the full path to the claude executable using the 'claude_path' parameter.\n\nInstall Claude Code CLI: npm install -g @anthropic-ai/claude-code\n\nAlternatively, you can use 'claude' client_type for Claude Desktop instead.\n\nError details: ${claudeCheck.error}`;
+    
+    return { 
+      content: [{ 
+        type: 'text', 
+        text: errorMessage
+      }], 
+      isError: true 
+    };
+  }
+
   // Fetch manifest to get the URL/package name
   let manifest;
   try {
@@ -290,7 +323,8 @@ async function addMcpServerClaudeCode(server_id, mcp_definition) {
   try {
     const execAsync = promisify(exec);
     
-    const command = `claude mcp add ${configKey} ${addTarget}`;
+    const claudeCmd = claudeCheck.claudePath;
+    const command = `${claudeCmd} mcp add ${configKey} ${addTarget}`;
     console.error(`[addMcpServerClaudeCode] Executing: ${command}`);
     
     const { stdout, stderr } = await execAsync(command);
@@ -346,6 +380,8 @@ async function getConfigPath(clientType) {
             }
         case 'windsurf':
              return path.join(homeDir, '.codeium', 'windsurf', 'mcp_config.json');
+        case 'codex':
+             return path.join(homeDir, '.codex', 'config.toml');
         default:
             throw new Error(`Unsupported client type for automatic path resolution: '${clientType}'. Please provide 'config_file_path'.`);
     }
@@ -413,13 +449,46 @@ async function writeConfigFile(filePath, config) {
     }
 }
 
+// TOML-specific functions for Codex
+async function readTomlConfigFile(filePath) {
+    try {
+        const data = await fs.readFile(filePath, 'utf-8');
+        try {
+            return toml.parse(data);
+        } catch (parseError) {
+            console.error(`[readTomlConfigFile] Error parsing TOML from ${filePath}:`, parseError);
+            throw new Error(`Failed to parse TOML configuration file: ${filePath}.`);
+        }
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+             console.warn(`[readTomlConfigFile] Config file not found at ${filePath}, treating as empty.`);
+             return { mcp_servers: {} };
+        }
+        console.error(`[readTomlConfigFile] Error reading ${filePath}:`, error);
+        throw new Error(`Failed to read config file: ${error.message}`);
+    }
+}
+
+async function writeTomlConfigFile(filePath, config) {
+    try {
+        const dir = path.dirname(filePath);
+        await fs.mkdir(dir, { recursive: true });
+        const tomlString = toml.stringify(config);
+        await fs.writeFile(filePath, tomlString, 'utf-8');
+        console.error(`[writeTomlConfigFile] Successfully wrote TOML config to ${filePath}`);
+    } catch (error) {
+        console.error(`[writeTomlConfigFile] Error writing to ${filePath}:`, error);
+        throw new Error(`Failed to write TOML config file: ${error.message}`);
+    }
+}
+
 async function add_mcp_server_config(input) {
   // Use globalApiUrl for fetching defaults
   const { server_id, client_type, config_file_path, mcp_definition } = input;
 
   // Special handling for Claude Code - use native claude mcp add command
   if (client_type === 'claude-code') {
-    return await addMcpServerClaudeCode(server_id, mcp_definition);
+    return await addMcpServerClaudeCode(server_id, mcp_definition, input.claude_path);
   }
 
   let resolvedPath;
@@ -519,7 +588,7 @@ async function add_mcp_server_config(input) {
     // Determine which key to use for server entries: prefer 'mcpServers', else 'servers'
     const serversKey = config.hasOwnProperty('mcpServers')
         ? 'mcpServers'
-        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers'); // Default to mcpServers if neither exists
+        : (config.hasOwnProperty('servers') ? 'servers' : 'mcpServers');
     if (!config[serversKey]) {
         config[serversKey] = {};
     }
@@ -619,13 +688,30 @@ async function stream_mcp_events(input) {
   });
 }
 
-async function removeMcpServerClaudeCode(server_id) {
+async function removeMcpServerClaudeCode(server_id, claudePath) {
+  // Check if claude command is available
+  const claudeCheck = await checkClaudeCommandAvailable(claudePath);
+  if (!claudeCheck.available) {
+    const errorMessage = claudePath 
+      ? `Error: Claude CLI command not found at provided path: ${claudePath}\n\nPlease verify the path is correct and the claude executable is accessible.\n\nError details: ${claudeCheck.error}`
+      : `Error: Claude CLI command not found in PATH. Please install Claude Code CLI or provide the full path to the claude executable using the 'claude_path' parameter.\n\nInstall Claude Code CLI: npm install -g @anthropic-ai/claude-code\n\nAlternatively, you can use 'claude' client_type for Claude Desktop instead.\n\nError details: ${claudeCheck.error}`;
+    
+    return { 
+      content: [{ 
+        type: 'text', 
+        text: errorMessage
+      }], 
+      isError: true 
+    };
+  }
+
   // For Claude Code, server_id could be either the config key name or the original server ID
   // We'll try to remove it directly as provided
   try {
     const execAsync = promisify(exec);
     
-    const command = `claude mcp remove ${server_id}`;
+    const claudeCmd = claudeCheck.claudePath;
+    const command = `${claudeCmd} mcp remove ${server_id}`;
     console.error(`[removeMcpServerClaudeCode] Executing: ${command}`);
     
     const { stdout, stderr } = await execAsync(command);
@@ -649,7 +735,7 @@ async function remove_mcp_server_config(input) {
   
   // Special handling for Claude Code - use native claude mcp remove command
   if (client_type === 'claude-code') {
-    return await removeMcpServerClaudeCode(server_id);
+    return await removeMcpServerClaudeCode(server_id, input.claude_path);
   }
   
   let configPath;
@@ -729,7 +815,8 @@ const AddMcpServerConfigTool = {
           workingDirectory: { type: "string", description: "The working directory for the server." }
         },
         description: "The MCP server definition object. Optional."
-      }
+      },
+      claude_path: { type: "string", description: "Full path to claude executable (only used for claude-code client_type when claude command is not in PATH)." }
     },
     required: ["server_id"]
   }
@@ -743,7 +830,8 @@ const RemoveMcpServerConfigTool = {
     properties: {
       client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
-      server_id: { type: "string", description: "The unique MCP server identifier (config key name) of the server configuration entry to remove." }
+      server_id: { type: "string", description: "The unique MCP server identifier (config key name) of the server configuration entry to remove." },
+      claude_path: { type: "string", description: "Full path to claude executable (only used for claude-code client_type when claude command is not in PATH)." }
     },
     required: ["server_id"]
   }

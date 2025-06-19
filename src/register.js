@@ -234,7 +234,37 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         client = new Client(clientOptions);
         
         try {
-            await client.connect(transport);
+            console.log(chalk.dim('Connecting to MCP server...'));
+            
+            // For SSE transports, add a timeout since some servers send non-standard keepalives
+            if (transport.constructor.name === 'SSEClientTransport') {
+                const connectPromise = client.connect(transport);
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('SSE connection timeout')), 5000)
+                );
+                
+                try {
+                    await Promise.race([connectPromise, timeoutPromise]);
+                } catch (sseError) {
+                    console.log(chalk.dim('SSE connection failed, trying HTTP transport...'));
+                    // Try HTTP transport as fallback
+                    await transport.close();
+                    transport = new StreamableHTTPClientTransport(new URL(packageOrUrl));
+                    if (authToken) {
+                        transport._authProvider = {
+                            tokens: async () => ({
+                                access_token: authToken,
+                                token_type: 'Bearer'
+                            })
+                        };
+                    }
+                    await client.connect(transport);
+                }
+            } else {
+                await client.connect(transport);
+            }
+            
+            console.log(chalk.dim('Connected successfully'));
         } catch (connectError) {
             // Restore fetch before throwing
             if (originalFetch) {
