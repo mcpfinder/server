@@ -703,7 +703,8 @@ export async function runRegister() {
                                     tools: [],
                                     resources: [],
                                     prompts: [],
-                                    probeInfo: probeInfo
+                                    probeInfo: probeInfo,
+                                    useMcpRemote: isUrl // Use mcp-remote for URL-based servers that require auth
                                 };
                                 console.log(chalk.yellow('\nPlease provide capability information...'));
                             } else {
@@ -716,7 +717,8 @@ export async function runRegister() {
                                     tools: [],
                                     resources: [],
                                     prompts: [],
-                                    probeInfo: probeInfo
+                                    probeInfo: probeInfo,
+                                    useMcpRemote: isUrl // Use mcp-remote for URL-based servers that require auth
                                 };
                                 console.log(chalk.yellow('\nProceeding with minimal registration (no capability details).'));
                             }

@@ -57,6 +57,12 @@ When a server requires authentication (returns 401), the tool offers three paths
 
 3. **HTTP/SSE Compatibility**: When HTTP or SSE transports fail, the tool automatically falls back to using `npx mcp-remote <url>` as a stdio transport. This ensures compatibility with servers that have transport-specific issues.
 
+4. **OAuth Authentication**: Some servers like whenmeet.me require OAuth authentication that isn't fully compatible with the MCP SDK. For these servers:
+   - Choose "n" when asked if you have a token
+   - Choose "n" for manual capability entry  
+   - The server will be registered with minimal information
+   - The manifest will use `npx mcp-remote` for installation, which handles OAuth properly
+
 ### API Integration
 
 The registration command submits to:
