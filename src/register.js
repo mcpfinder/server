@@ -68,8 +68,87 @@ function isValidPackageNameOrUrl(input) {
     return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
 }
 
+// Function to probe server for minimal information
+async function probeServerMinimal(url) {
+    const info = {
+        headers: {},
+        auth: {},
+        endpoints: [],
+        metadata: {}
+    };
+    
+    try {
+        // 1. OPTIONS request
+        const optionsResponse = await fetch(url, { 
+            method: 'OPTIONS',
+            headers: { 'Origin': 'https://mcpfinder.dev' }
+        });
+        
+        if (optionsResponse.ok) {
+            info.headers.allowMethods = optionsResponse.headers.get('access-control-allow-methods');
+            info.headers.allowHeaders = optionsResponse.headers.get('access-control-allow-headers');
+            info.headers.allowOrigin = optionsResponse.headers.get('access-control-allow-origin');
+        }
+        
+        // 2. GET request for metadata
+        const getResponse = await fetch(url, { 
+            method: 'GET',
+            headers: { 'Accept': 'text/html,application/json' }
+        });
+        
+        if (getResponse.ok) {
+            const contentType = getResponse.headers.get('content-type');
+            info.metadata.contentType = contentType;
+            
+            if (contentType?.includes('text/html')) {
+                const text = await getResponse.text();
+                const titleMatch = text.match(/<title>(.*?)<\/title>/);
+                if (titleMatch) {
+                    info.metadata.title = titleMatch[1];
+                }
+                info.metadata.containsMCP = text.includes('MCP') || text.includes('Model Context Protocol');
+            }
+        }
+        
+        // 3. Analyze auth error
+        const initResponse = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                id: 1,
+                method: 'initialize',
+                params: { protocolVersion: '2024-11-05' }
+            })
+        });
+        
+        if (initResponse.status === 401) {
+            info.auth.required = true;
+            const authHeader = initResponse.headers.get('www-authenticate');
+            if (authHeader) {
+                info.auth.wwwAuthenticate = authHeader;
+            }
+            
+            try {
+                const error = await initResponse.json();
+                if (error.error?.data) {
+                    info.auth.details = error.error.data;
+                }
+            } catch (e) {}
+        } else if (initResponse.ok) {
+            // Server might not require auth
+            info.auth.required = false;
+        }
+        
+    } catch (e) {
+        // Ignore probe errors
+    }
+    
+    return info;
+}
+
 // Function to introspect MCP server
-async function introspectMCPServer(packageOrUrl, tempDir = null) {
+async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = null) {
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
     let transport;
     let client;
@@ -99,7 +178,19 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
         }
         
         // Connect to the MCP server
-        client = new Client({ name: 'mcpfinder-register', version: '1.0.0' });
+        const clientOptions = { name: 'mcpfinder-register', version: '1.0.0' };
+        
+        // Add auth token if provided
+        if (authToken && isUrl) {
+            // For HTTP transports, we need to pass auth in the transport options
+            // This is a simplified approach - actual implementation may vary
+            transport._authProvider = () => ({ 
+                type: 'bearer',
+                token: authToken 
+            });
+        }
+        
+        client = new Client(clientOptions);
         await client.connect(transport);
         
         // List available tools - this is the primary MCP viability test
@@ -166,12 +257,20 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
     // Build capabilities array
     const capabilities = [];
     
-    // Check if this is manual registration with placeholder capabilities
+    // Check if this is manual or minimal registration
     const isManual = tools.some(t => t.name === 'unknown') || 
                      resources.some(r => r.name === 'unknown') || 
                      prompts.some(p => p.name === 'unknown');
+    const isMinimal = capabilities.length === 0 && additionalInfo.isMinimal;
     
-    if (isManual) {
+    if (isMinimal) {
+        // For minimal registration, just indicate unknown capabilities
+        capabilities.push({
+            name: 'capabilities_unknown',
+            type: 'tool',
+            description: 'Server capabilities cannot be determined without authentication'
+        });
+    } else if (isManual) {
         // For manual registration, create generic capability entries
         if (tools.length > 0) {
             capabilities.push({
@@ -358,29 +457,83 @@ export async function runRegister() {
                 introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
                 
                 if (!introspectionResult.isValid) {
-                    console.log(chalk.red(`❌ Not a valid MCP server: ${introspectionResult.error}`));
+                    console.log(chalk.red(`❌ Cannot connect to MCP server: ${introspectionResult.error}`));
                     
                     // Check if it's an authentication error
-                    if (introspectionResult.error.includes('401') || introspectionResult.error.includes('Authentication required')) {
-                        console.log(chalk.yellow('\nThis server requires authentication.'));
-                        const continueAnswer = await askQuestion(rl, 'Would you like to register it manually without introspection? (y/n): ');
+                    if (introspectionResult.error.includes('401') || introspectionResult.error.includes('Authentication required') || introspectionResult.error.includes('Unauthorized')) {
+                        console.log(chalk.yellow('\nThis server requires authentication. Gathering available information...'));
                         
-                        if (continueAnswer.toLowerCase() === 'y') {
-                            // Manual registration for authenticated servers
-                            introspectionResult = {
-                                isValid: true,
-                                isManual: true,
-                                serverInfo: {},
-                                capabilities: {},
-                                tools: [],
-                                resources: [],
-                                prompts: []
-                            };
-                            console.log(chalk.yellow('\nProceeding with manual registration...'));
-                            console.log(chalk.dim('Note: You\'ll need to provide server details manually.'));
-                        } else {
-                            console.log(chalk.yellow('Please try a different package or URL.\n'));
-                            packageOrUrl = ''; // Reset to ask again
+                        // Probe for minimal information
+                        const probeInfo = await probeServerMinimal(packageOrUrl);
+                        
+                        // Display collected information
+                        console.log(chalk.cyan('\n📊 Information gathered without authentication:\n'));
+                        
+                        if (probeInfo.metadata.title) {
+                            console.log(`${chalk.bold('Page Title:')} ${probeInfo.metadata.title}`);
+                        }
+                        if (probeInfo.headers.allowMethods) {
+                            console.log(`${chalk.bold('Allowed Methods:')} ${probeInfo.headers.allowMethods}`);
+                        }
+                        if (probeInfo.auth.details) {
+                            console.log(`${chalk.bold('Auth Details:')} ${JSON.stringify(probeInfo.auth.details, null, 2)}`);
+                        }
+                        if (probeInfo.auth.wwwAuthenticate) {
+                            console.log(`${chalk.bold('Auth Type:')} ${probeInfo.auth.wwwAuthenticate}`);
+                        }
+                        
+                        // Ask if user has a token
+                        const hasTokenAnswer = await askQuestion(rl, '\nDo you have an authentication token for this server? (y/n): ');
+                        
+                        if (hasTokenAnswer.toLowerCase() === 'y') {
+                            const token = await askQuestion(rl, 'Please enter your authentication token: ');
+                            
+                            if (token) {
+                                console.log(chalk.blue('\n⏳ Retrying with authentication token...'));
+                                
+                                // Retry introspection with token
+                                const retryResult = await introspectMCPServer(packageOrUrl, tempDir, token);
+                                
+                                if (retryResult.isValid) {
+                                    introspectionResult = retryResult;
+                                    console.log(chalk.green('✅ Successfully connected with authentication!'));
+                                } else {
+                                    console.log(chalk.red('❌ Authentication failed. Proceeding with limited information.'));
+                                }
+                            }
+                        }
+                        
+                        // If still no valid introspection, proceed with manual/minimal registration
+                        if (!introspectionResult.isValid) {
+                            const addCapabilitiesAnswer = await askQuestion(rl, '\nWould you like to manually add capability information? (y/n): ');
+                            
+                            if (addCapabilitiesAnswer.toLowerCase() === 'y') {
+                                // Manual capability entry
+                                introspectionResult = {
+                                    isValid: true,
+                                    isManual: true,
+                                    serverInfo: {},
+                                    capabilities: {},
+                                    tools: [],
+                                    resources: [],
+                                    prompts: [],
+                                    probeInfo: probeInfo
+                                };
+                                console.log(chalk.yellow('\nPlease provide capability information...'));
+                            } else {
+                                // Minimal registration with no capabilities
+                                introspectionResult = {
+                                    isValid: true,
+                                    isMinimal: true,
+                                    serverInfo: {},
+                                    capabilities: {},
+                                    tools: [],
+                                    resources: [],
+                                    prompts: [],
+                                    probeInfo: probeInfo
+                                };
+                                console.log(chalk.yellow('\nProceeding with minimal registration (no capability details).'));
+                            }
                         }
                     } else {
                         console.log(chalk.yellow('Please try a different package or URL.\n'));
@@ -401,6 +554,7 @@ export async function runRegister() {
         // Check if this server already exists (for unverified updates)
         const hasSecret = !!process.env.MCP_REGISTRY_SECRET;
         let isUpdate = false;
+        let existingServer = null;
         
         // Check if URL already exists in registry
         if (!hasSecret) {
@@ -411,7 +565,15 @@ export async function runRegister() {
                     // API returns array directly, not object with tools property
                     if (Array.isArray(searchResult) && searchResult.length > 0 && searchResult[0].url === packageOrUrl) {
                         isUpdate = true;
-                        console.log(chalk.yellow('\n⚠️  This server is already registered. Updating capabilities only...'));
+                        existingServer = searchResult[0];
+                        
+                        // Check if server is unanalyzed - allow full update for those
+                        const isUnanalyzed = existingServer.tags && existingServer.tags.includes('unanalyzed');
+                        if (isUnanalyzed) {
+                            console.log(chalk.yellow('\n⚠️  This server was previously registered as unanalyzed. You can now provide full details.'));
+                        } else {
+                            console.log(chalk.yellow('\n⚠️  This server is already registered. Updating capabilities only...'));
+                        }
                     }
                 }
             } catch (e) {
@@ -419,8 +581,8 @@ export async function runRegister() {
             }
         }
         
-        // Display discovered capabilities (skip for manual registration)
-        if (!introspectionResult.isManual) {
+        // Display discovered capabilities (skip for manual/minimal registration)
+        if (!introspectionResult.isManual && !introspectionResult.isMinimal) {
             console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
             console.log(`${chalk.bold('Server:')} ${introspectionResult.serverInfo?.name || 'Unknown'}`);
             console.log(`${chalk.bold('Version:')} ${introspectionResult.serverInfo?.version || 'Unknown'}`);
@@ -445,13 +607,13 @@ export async function runRegister() {
         // Collect additional information (skip for unauthorized updates)
         let description, tags = [], requiresApiKey = false, authInfo = {};
         
-        // For manual registration of authenticated servers, always ask for auth info
-        if (introspectionResult.isManual) {
+        // For manual/minimal registration of authenticated servers, always set auth required
+        if (introspectionResult.isManual || introspectionResult.isMinimal) {
             requiresApiKey = true;
         }
         
-        if (!hasSecret && isUpdate) {
-            // Unauthorized update - skip all questions
+        if (!hasSecret && isUpdate && existingServer && !existingServer.tags?.includes('unanalyzed')) {
+            // Unauthorized update for already-analyzed servers - skip all questions
             console.log(chalk.dim('\nSkipping questions for unauthorized update...'));
             description = introspectionResult.serverInfo?.description || `MCP server: ${packageOrUrl}`;
         } else {
@@ -484,12 +646,56 @@ export async function runRegister() {
             }
             
             tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
-            requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
+            
+            // Add automatic tags for minimal registration
+            if (introspectionResult.isMinimal) {
+                if (!tags.includes('unanalyzed')) tags.push('unanalyzed');
+                if (!tags.includes('auth-required')) tags.push('auth-required');
+            }
+            
+            // Override requiresApiKey for servers that couldn't be introspected due to auth
+            if (!introspectionResult.isManual && !introspectionResult.isMinimal) {
+                requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
+            }
             
             if (requiresApiKey) {
-                if (introspectionResult.isManual) {
-                    // For manual registration, ask about auth type
-                    const authType = await askQuestion(rl, 'Authentication type (oauth/api-key/custom) [oauth]: ') || 'oauth';
+                if (introspectionResult.isManual || introspectionResult.isMinimal) {
+                    // Determine auth type from probe info or ask user
+                    let authType = 'oauth'; // default
+                    
+                    if (introspectionResult.probeInfo?.auth?.wwwAuthenticate) {
+                        const wwwAuth = introspectionResult.probeInfo.auth.wwwAuthenticate.toLowerCase();
+                        if (wwwAuth.includes('bearer')) authType = 'oauth';
+                        else if (wwwAuth.includes('basic')) authType = 'api-key';
+                        else if (wwwAuth.includes('apikey')) authType = 'api-key';
+                    }
+                    
+                    // For manual entry, let user override detected type
+                    if (introspectionResult.isManual) {
+                        const userAuthType = await askQuestion(rl, `Authentication type (oauth/api-key/custom) [${authType}]: `);
+                        if (userAuthType) authType = userAuthType;
+                        
+                        // For manual registration, ask about capabilities
+                        console.log(chalk.yellow('\nSince we couldn\'t introspect the server, please provide capability details:'));
+                        const hasTools = await askQuestion(rl, 'Does this server provide tools? (y/n): ');
+                        const hasResources = await askQuestion(rl, 'Does this server provide resources? (y/n): ');
+                        const hasPrompts = await askQuestion(rl, 'Does this server provide prompts? (y/n): ');
+                        
+                        // Create placeholder capabilities
+                        if (hasTools.toLowerCase() === 'y') {
+                            introspectionResult.capabilities.tools = {};
+                            introspectionResult.tools = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                        }
+                        if (hasResources.toLowerCase() === 'y') {
+                            introspectionResult.capabilities.resources = {};
+                            introspectionResult.resources = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                        }
+                        if (hasPrompts.toLowerCase() === 'y') {
+                            introspectionResult.capabilities.prompts = {};
+                            introspectionResult.prompts = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
+                        }
+                    }
+                    
                     authInfo.type = authType;
                     
                     if (authType === 'oauth') {
@@ -500,28 +706,9 @@ export async function runRegister() {
                     } else {
                         authInfo.authInstructions = await askQuestion(rl, 'Authentication instructions: ') || 'Custom authentication required';
                     }
-                    
-                    // For manual registration, ask about capabilities
-                    console.log(chalk.yellow('\nSince we couldn\'t introspect the server, please provide capability details:'));
-                    const hasTools = await askQuestion(rl, 'Does this server provide tools? (y/n): ');
-                    const hasResources = await askQuestion(rl, 'Does this server provide resources? (y/n): ');
-                    const hasPrompts = await askQuestion(rl, 'Does this server provide prompts? (y/n): ');
-                    
-                    // Create placeholder capabilities
-                    if (hasTools.toLowerCase() === 'y') {
-                        introspectionResult.capabilities.tools = {};
-                        introspectionResult.tools = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
-                    }
-                    if (hasResources.toLowerCase() === 'y') {
-                        introspectionResult.capabilities.resources = {};
-                        introspectionResult.resources = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
-                    }
-                    if (hasPrompts.toLowerCase() === 'y') {
-                        introspectionResult.capabilities.prompts = {};
-                        introspectionResult.prompts = [{ name: 'unknown', description: 'Capabilities will be available after authentication' }];
-                    }
                 } else {
                     // Regular auth for introspected servers
+                    authInfo.type = 'api-key'; // default for regular servers
                     authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
                     authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
                 }
@@ -530,14 +717,15 @@ export async function runRegister() {
         
         // Generate manifest
         const manifest = generateManifest(packageOrUrl, introspectionResult, {
-            description: description || introspectionResult.serverInfo?.description,
+            description: description || introspectionResult.serverInfo?.description || 
+                        (introspectionResult.isMinimal ? 'Authentication required - capabilities unknown' : undefined),
             tags,
             requiresApiKey,
             ...authInfo
         });
         
-        // For unauthorized updates, skip manifest preview and confirmation
-        if (!hasSecret && isUpdate) {
+        // For unauthorized updates of already-analyzed servers, skip manifest preview and confirmation
+        if (!hasSecret && isUpdate && existingServer && !existingServer.tags?.includes('unanalyzed')) {
             console.log(chalk.dim('\nSubmitting capability updates...'));
         } else {
             // Show manifest preview
