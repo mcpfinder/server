@@ -22,16 +22,31 @@ Specifically, it enables the AI assistant to:
 
 ## Quick Start
 
+### Option 1: Local Installation (stdio transport)
 Run in your terminal the interactive setup tool to automatically update the MCP configuration file:
 ```bash
 npx -y @mcpfinder/server install
 ```
 This command guides you through selecting your client (Cursor, VS Code, Claude, etc.) and adds the necessary `mcpfinder` entry to the correct configuration file (e.g., `~/.cursor/mcp.json`).
+
+### Option 2: Cloud Access (HTTP/SSE transport)
+You can also access MCPfinder directly via HTTP/SSE transport without local installation:
+```bash
+# For Claude CLI users
+claude mcp add --transport http mcpfinder https://mcpfinder.dev/mcp
+
+# Direct HTTP endpoint
+https://mcpfinder.dev/mcp
+```
+This provides the same tools (`search_mcp_servers`, `get_mcp_server_details`, etc.) but runs in the cloud without needing local Node.js or npm.
+
 See "Running from source" and "Commands and Options" for more details if you are working directly with the source code.
 
 ## Manual Configuration
 
 To manually configure an MCP client, you need to create or modify its JSON configuration file to include an entry for `mcpfinder`.
+
+### Stdio Transport Configuration (Local)
 
 **Configuration File Structure:**
 
@@ -51,6 +66,21 @@ To manually configure an MCP client, you need to create or modify its JSON confi
 
 **Note:** For Visual Studio Code (`settings.json`), the top-level key for MCP configurations must be `servers` instead of `mcpServers`.
 
+### HTTP/SSE Transport Configuration (Cloud)
+
+For clients that support HTTP/SSE transport:
+
+```json
+{
+  "mcpServers": {
+    "mcpfinder": {
+      "url": "https://mcpfinder.dev/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
 ## Running from source
 
 *   Clone this repository, e.g., `git clone https://github.com/mcpfinder/server`
@@ -66,12 +96,14 @@ If no command is specified, `index.js` starts the MCP server.
     ```bash
     node index.js
     ```
-*   **HTTP Mode:**
+*   **HTTP Mode (local):**
     ```bash
     node index.js --http
     ```
     *   `--port <number>`: Specify the port for HTTP mode (default: 6181, or `MCP_PORT` env var).
     *   `--api-url <url>`: Specify the MCPfinder Registry API URL used by the tools (default: `https://mcpfinder.dev`, or `MCPFINDER_API_URL` env var).
+
+**Note:** The HTTP mode runs locally on your machine. For cloud-based HTTP/SSE access, use the public endpoint at `https://mcpfinder.dev/mcp` instead.
 
 **Executing Commands:**
 *   `install`: Run the interactive setup to configure a client application.
@@ -96,7 +128,7 @@ The server uses the following environment variables:
 
 ## Provided Tools
 
-This MCP server exposes the following tools to the connected AI assistant:
+This MCP server exposes the following tools to the connected AI assistant (available via both stdio and HTTP/SSE transports):
 
 ### 1. `search_mcp_servers`
 
