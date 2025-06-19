@@ -158,13 +158,11 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         if (isUrl) {
             const url = new URL(packageOrUrl);
             
-            // Check if URL ends with /sse or is whenmeet - use SSE transport
-            if (packageOrUrl.endsWith('/sse') || packageOrUrl.includes('whenmeet.me')) {
+            // Check if URL ends with /sse - use SSE transport
+            if (packageOrUrl.endsWith('/sse')) {
                 // Use SSE transport for SSE endpoints
                 transport = new SSEClientTransport(url);
                 
-                // Note: whenmeet.me has an origin mismatch issue (sends http:// in endpoint event)
-                // This requires manual registration or authentication
             } else {
                 // Try to detect if it's an SSE endpoint by making a GET request
                 try {
@@ -181,7 +179,6 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                         // It's an SSE endpoint
                         transport = new SSEClientTransport(url);
                         
-                        // Note: whenmeet.me has an origin mismatch issue
                     } else {
                         // Use StreamableHTTP transport for modern HTTP endpoints
                         transport = new StreamableHTTPClientTransport(url);

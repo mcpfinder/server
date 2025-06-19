@@ -8,6 +8,8 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import fetch from 'node-fetch';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -117,7 +119,7 @@ const GetServerDetailsInput = z.object({
 // Union schema to ensure either client_type or config_file_path is provided, but not both.
 const ClientIdentifierSchema = z.union([
   z.object({
-    client_type: z.string().describe("The type or name of the client application (e.g., 'cursor', 'claude', 'windsurf')."),
+    client_type: z.string().describe("The type or name of the client application (e.g., 'cursor', 'claude', 'windsurf', 'claude-code')."),
     config_file_path: z.undefined(),
   }),
   z.object({
@@ -255,6 +257,58 @@ async function get_mcp_server_details(input) {
 
 // --- File Utils ---
 
+async function addMcpServerClaudeCode(server_id, mcp_definition) {
+  // Fetch manifest to get the URL/package name
+  let manifest;
+  try {
+    console.error(`[addMcpServerClaudeCode] Fetching manifest for ${server_id}.`);
+    const detailsUrl = `${globalApiUrl}/api/v1/tools/${server_id}`;
+    const response = await fetch(detailsUrl);
+    if (!response.ok) throw new Error(`API error (${response.status}) fetching manifest for ${server_id}`);
+    manifest = await response.json();
+  } catch (fetchError) {
+    console.error(`[addMcpServerClaudeCode] Failed to fetch manifest for ${server_id}:`, fetchError);
+    return { content: [{ type: 'text', text: `Error: Failed to fetch manifest for server ${server_id}. ${fetchError.message}` }], isError: true };
+  }
+
+  // Generate a config key name for Claude Code
+  const configKey = generateConfigKey(manifest.url, server_id);
+  
+  // Determine what to add - URL for HTTP/HTTPS servers, package name for NPM packages
+  let addTarget;
+  if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
+    addTarget = manifest.url;
+    console.error(`[addMcpServerClaudeCode] HTTP/SSE server detected, will add URL: ${addTarget}`);
+  } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+    addTarget = manifest.url;
+    console.error(`[addMcpServerClaudeCode] NPM package detected, will add package: ${addTarget}`);
+  } else {
+    return { content: [{ type: 'text', text: `Error: Could not determine package name or URL for server ${server_id}` }], isError: true };
+  }
+
+  // Execute claude mcp add command
+  try {
+    const execAsync = promisify(exec);
+    
+    const command = `claude mcp add ${configKey} ${addTarget}`;
+    console.error(`[addMcpServerClaudeCode] Executing: ${command}`);
+    
+    const { stdout, stderr } = await execAsync(command);
+    
+    if (stderr && !stderr.includes('warning')) {
+      console.error(`[addMcpServerClaudeCode] Command stderr: ${stderr}`);
+      return { content: [{ type: 'text', text: `Error executing claude mcp add: ${stderr}` }], isError: true };
+    }
+    
+    console.error(`[addMcpServerClaudeCode] Command stdout: ${stdout}`);
+    return { content: [{ type: 'text', text: `Successfully added server '${server_id}' (as '${configKey}') to Claude Code using: ${command}` }] };
+    
+  } catch (execError) {
+    console.error(`[addMcpServerClaudeCode] Failed to execute claude mcp add:`, execError);
+    return { content: [{ type: 'text', text: `Error: Failed to execute claude mcp add command. Make sure Claude Code CLI is installed and accessible. ${execError.message}` }], isError: true };
+  }
+}
+
 async function resolveAndValidateConfigPath(client_type, config_file_path) {
   let resolvedPath;
   if (config_file_path) {
@@ -363,6 +417,11 @@ async function add_mcp_server_config(input) {
   // Use globalApiUrl for fetching defaults
   const { server_id, client_type, config_file_path, mcp_definition } = input;
 
+  // Special handling for Claude Code - use native claude mcp add command
+  if (client_type === 'claude-code') {
+    return await addMcpServerClaudeCode(server_id, mcp_definition);
+  }
+
   let resolvedPath;
   try {
       resolvedPath = await resolveAndValidateConfigPath(client_type, config_file_path);
@@ -396,12 +455,12 @@ async function add_mcp_server_config(input) {
     // Fetching is already done above, manifest variable is available
     try {
       let defaultCommand = [];
-      // If the URL exists and looks like http:// or https://, use mcp-remote wrapper
+      // Generic solution: for HTTP/HTTPS URLs, use mcp-remote instead of -y
       if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
         defaultCommand = ['npx', 'mcp-remote', manifest.url];
         console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(defaultCommand)}`);
       } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
-        // If the URL exists and doesn't look like http:// or https://, assume it's a package name
+        // NPM package - use standard npx -y approach
         defaultCommand = ['npx', '-y', manifest.url];
         console.error(`[add_mcp_server_config] NPM package detected: ${JSON.stringify(defaultCommand)}`);
       } else {
@@ -560,8 +619,39 @@ async function stream_mcp_events(input) {
   });
 }
 
+async function removeMcpServerClaudeCode(server_id) {
+  // For Claude Code, server_id could be either the config key name or the original server ID
+  // We'll try to remove it directly as provided
+  try {
+    const execAsync = promisify(exec);
+    
+    const command = `claude mcp remove ${server_id}`;
+    console.error(`[removeMcpServerClaudeCode] Executing: ${command}`);
+    
+    const { stdout, stderr } = await execAsync(command);
+    
+    if (stderr && !stderr.includes('warning')) {
+      console.error(`[removeMcpServerClaudeCode] Command stderr: ${stderr}`);
+      return { content: [{ type: 'text', text: `Error executing claude mcp remove: ${stderr}` }], isError: true };
+    }
+    
+    console.error(`[removeMcpServerClaudeCode] Command stdout: ${stdout}`);
+    return { content: [{ type: 'text', text: `Successfully removed server '${server_id}' from Claude Code using: ${command}` }] };
+    
+  } catch (execError) {
+    console.error(`[removeMcpServerClaudeCode] Failed to execute claude mcp remove:`, execError);
+    return { content: [{ type: 'text', text: `Error: Failed to execute claude mcp remove command. Make sure Claude Code CLI is installed and accessible. ${execError.message}` }], isError: true };
+  }
+}
+
 async function remove_mcp_server_config(input) {
   const { server_id, client_type, config_file_path } = input;
+  
+  // Special handling for Claude Code - use native claude mcp remove command
+  if (client_type === 'claude-code') {
+    return await removeMcpServerClaudeCode(server_id);
+  }
+  
   let configPath;
 
   try {
@@ -624,11 +714,11 @@ const GetMcpServerDetailsTool = {
 
 const AddMcpServerConfigTool = {
   name: 'add_mcp_server_config',
-  description: "Enables capabilities (e.g., tools, features) from a specific MCP server/tool. Add or update its configuration in the client application (e.g., Cursor, Claude, VS Code) using server_id obtained from search_mcp_servers results. Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
+  description: "Enables capabilities (e.g., tools, features) from a specific MCP server/tool. Add or update its configuration in the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code) using server_id obtained from search_mcp_servers results. Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "A unique MCPFinder ID of the MCP server received from search_mcp_servers." },
       mcp_definition: {
@@ -647,11 +737,11 @@ const AddMcpServerConfigTool = {
 
 const RemoveMcpServerConfigTool = {
   name: 'remove_mcp_server_config',
-  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude). Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
+  description: "Removes the configuration for a specific MCP server/tool from the client application (e.g., Cursor, Claude Desktop, Windsurf, Claude Code). Provide EITHER client_type (see available options) OR config_file_path to specify the target config file.",
   inputSchema: {
     type: "object",
     properties: {
-      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf'). Mutually exclusive with config_file_path." },
+      client_type: { type: "string", description: "The type of client application (currently supported: 'cursor', 'claude', 'windsurf', 'claude-code'). Mutually exclusive with config_file_path." },
       config_file_path: { type: "string", description: "Absolute path or path starting with '~' to the config file. Mutually exclusive with client_type." },
       server_id: { type: "string", description: "The unique MCP server identifier (config key name) of the server configuration entry to remove." }
     },
