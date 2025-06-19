@@ -811,13 +811,38 @@ export async function runRegister() {
             
             let tagsInput;
             try {
-                tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
+                tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, lowercase, letters/numbers/hyphens only, e.g., ai, github, productivity): ');
             } catch (questionError) {
                 console.error(chalk.red('\nError reading input:', questionError.message));
                 throw questionError;
             }
             
-            tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
+            // Parse and validate tags
+            const tagPattern = /^[a-z0-9-]+$/;
+            const rawTags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
+            tags = [];
+            
+            for (const tag of rawTags) {
+                // Clean up the tag - remove spaces and special characters
+                const cleanedTag = tag.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                
+                if (cleanedTag && tagPattern.test(cleanedTag)) {
+                    if (!tags.includes(cleanedTag)) { // Avoid duplicates
+                        tags.push(cleanedTag);
+                    }
+                } else if (tag) {
+                    console.log(chalk.yellow(`Warning: Skipping invalid tag "${tag}" (only lowercase letters, numbers, and hyphens allowed)`));
+                }
+            }
+            
+            if (tags.length === 0) {
+                console.log(chalk.yellow('No valid tags provided. Using default tags.'));
+                // Try to generate some tags from the package name or description
+                if (packageOrUrl.includes('desktop')) tags.push('desktop');
+                if (packageOrUrl.includes('ai') || description.toLowerCase().includes('ai')) tags.push('ai');
+                if (packageOrUrl.includes('automation') || description.toLowerCase().includes('automation')) tags.push('automation');
+                if (tags.length === 0) tags.push('utility'); // Default fallback
+            }
             
             // Add automatic tags for minimal registration
             if (introspectionResult.isMinimal) {

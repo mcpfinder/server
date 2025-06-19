@@ -523,33 +523,24 @@ async function add_mcp_server_config(input) {
     console.error(`[add_mcp_server_config] User did not provide command, determining from manifest...`);
     // Fetching is already done above, manifest variable is available
     try {
-      let defaultCommand = [];
-      // Generic solution: for HTTP/HTTPS URLs, use mcp-remote instead of -y
-      if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
-        defaultCommand = ['npx', 'mcp-remote', manifest.url];
-        console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(defaultCommand)}`);
-      } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
-        // NPM package - use standard npx -y approach
-        defaultCommand = ['npx', '-y', manifest.url];
-        console.error(`[add_mcp_server_config] NPM package detected: ${JSON.stringify(defaultCommand)}`);
-      } else {
-         console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
-      }
+      let commandToUse = [];
 
-      // Determine the command to use: prioritize non-empty manifest command, then URL-based default
-      let commandToUse = defaultCommand; // Start with URL-based default
-      if (manifest?.installation?.command && Array.isArray(manifest.installation.command)) {
-          if (manifest.installation.command.length > 0) {
-               // If API provided a non-empty command, use it instead of the URL-based default
-               commandToUse = manifest.installation.command;
-               console.error(`[add_mcp_server_config] Using command from fetched manifest installation: ${JSON.stringify(commandToUse)}`);
-          } else {
-               // API provided an empty command array, stick with the URL-based default (if any)
-               console.error(`[add_mcp_server_config] Manifest installation command is empty, using URL-based default (if available): ${JSON.stringify(commandToUse)}`);
-          }
+      // First priority: Check if API provides a command
+      if (manifest?.installation?.command && Array.isArray(manifest.installation.command) && manifest.installation.command.length > 0) {
+        commandToUse = manifest.installation.command;
+        console.error(`[add_mcp_server_config] Using command from fetched manifest installation: ${JSON.stringify(commandToUse)}`);
       } else {
-          // Manifest did not provide installation.command, stick with the URL-based default
-          console.error(`[add_mcp_server_config] Manifest installation command missing, using URL-based default (if available): ${JSON.stringify(commandToUse)}`);
+        // Second priority: Generate command based on URL if no API command provided
+        if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
+          commandToUse = ['npx', 'mcp-remote', manifest.url];
+          console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(commandToUse)}`);
+        } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
+          // NPM package - use standard npx -y approach
+          commandToUse = ['npx', '-y', manifest.url];
+          console.error(`[add_mcp_server_config] NPM package detected: ${JSON.stringify(commandToUse)}`);
+        } else {
+          console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
+        }
       }
 
       // Merge command with potentially provided env/workingDir
