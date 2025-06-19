@@ -23,7 +23,15 @@ function createPromptInterface() {
 
 // Function to ask a question and get the answer
 function askQuestion(rl, query) {
-    return new Promise(resolve => rl.question(query, resolve));
+    return new Promise((resolve, reject) => {
+        rl.question(query, (answer) => {
+            if (answer === undefined) {
+                reject(new Error('Input interrupted'));
+            } else {
+                resolve(answer);
+            }
+        });
+    });
 }
 
 // Function to validate package name/URL
@@ -54,8 +62,15 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
     try {
         if (isUrl) {
             // HTTP/SSE transport
-            const baseUrl = new URL(packageOrUrl);
-            const sseUrl = new URL('/sse', baseUrl);
+            // If URL already ends with /sse, use it as is
+            // Otherwise, append /sse to the base URL
+            let sseUrl;
+            if (packageOrUrl.endsWith('/sse')) {
+                sseUrl = new URL(packageOrUrl);
+            } else {
+                const baseUrl = new URL(packageOrUrl);
+                sseUrl = new URL('/sse', baseUrl);
+            }
             transport = new SSEClientTransport(sseUrl);
         } else {
             // STDIO transport for npm packages
@@ -78,8 +93,8 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
         const tools = toolsResult.tools || [];
         
         // Get server info and capabilities
-        const serverInfo = client.serverInfo;
-        const capabilities = client.serverCapabilities;
+        const serverInfo = client.serverInfo || {};
+        const capabilities = client.serverCapabilities || {};
         
         // List resources if supported
         let resources = [];
@@ -161,8 +176,22 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
         args: ['-y', packageOrUrl]
     };
     
+    // Determine a good name for the manifest
+    let name = serverInfo?.name;
+    if (!name) {
+        if (isUrl) {
+            // Extract a name from URL (e.g., https://mcp.deepwiki.com/sse -> deepwiki)
+            const urlObj = new URL(packageOrUrl);
+            const hostname = urlObj.hostname;
+            name = hostname.replace(/^(www\.|mcp\.)/, '').replace(/\.(com|org|net|io)$/, '');
+        } else {
+            // Use package name
+            name = packageOrUrl;
+        }
+    }
+    
     const manifest = {
-        name: serverInfo?.name || packageOrUrl,
+        name: name,
         description: additionalInfo.description || serverInfo?.description || `MCP server: ${packageOrUrl}`,
         url: packageOrUrl,
         protocol_version: 'MCP/1.0',
@@ -225,30 +254,42 @@ export async function runRegister() {
     let tempDir = null;
     
     try {
-        // Ask for package name/URL
+        // Keep asking for package name/URL until we get a valid MCP server
         let packageOrUrl = '';
-        while (!isValidPackageNameOrUrl(packageOrUrl)) {
-            packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
-            if (!isValidPackageNameOrUrl(packageOrUrl)) {
-                console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+        let introspectionResult = null;
+        
+        while (!introspectionResult || !introspectionResult.isValid) {
+            // Ask for package name/URL
+            while (!isValidPackageNameOrUrl(packageOrUrl)) {
+                packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
+                if (!isValidPackageNameOrUrl(packageOrUrl)) {
+                    console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+                }
+            }
+            
+            packageOrUrl = packageOrUrl.trim();
+            const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
+            
+            // Introspect the MCP server
+            const spinner = ora('Connecting to MCP server and verifying capabilities...').start();
+            
+            if (tempDir) {
+                // Clean up previous temp dir if it exists
+                try {
+                    rmSync(tempDir, { recursive: true, force: true });
+                } catch (e) {}
+            }
+            tempDir = !isUrl ? mkdtempSync(join(tmpdir(), 'mcp-register-')) : null;
+            introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
+            
+            if (!introspectionResult.isValid) {
+                spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
+                console.log(chalk.yellow('Please try a different package or URL.\n'));
+                packageOrUrl = ''; // Reset to ask again
+            } else {
+                spinner.succeed('Successfully connected to MCP server');
             }
         }
-        
-        packageOrUrl = packageOrUrl.trim();
-        const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
-        
-        // Introspect the MCP server
-        const spinner = ora('Connecting to MCP server and verifying capabilities...').start();
-        
-        tempDir = !isUrl ? mkdtempSync(join(tmpdir(), 'mcp-register-')) : null;
-        const introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
-        
-        if (!introspectionResult.isValid) {
-            spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
-            return;
-        }
-        
-        spinner.succeed('Successfully connected to MCP server');
         
         // Display discovered capabilities
         console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
@@ -270,7 +311,12 @@ export async function runRegister() {
         
         // Collect additional information
         console.log('\n');
-        const description = await askQuestion(rl, `Provide a brief description of your MCP server [${introspectionResult.serverInfo?.description || ''}]: `);
+        const defaultDescription = introspectionResult.serverInfo?.description || '';
+        const descriptionPrompt = defaultDescription 
+            ? `Provide a brief description of your MCP server [${defaultDescription}]: `
+            : 'Provide a brief description of your MCP server: ';
+        const description = await askQuestion(rl, descriptionPrompt) || defaultDescription;
+        
         const tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
         const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
         
@@ -327,7 +373,11 @@ export async function runRegister() {
         }
         
     } catch (error) {
-        console.error(chalk.red(`\nError: ${error.message}`));
+        if (error.message === 'Input interrupted') {
+            console.log(chalk.yellow('\nRegistration cancelled by user'));
+        } else {
+            console.error(chalk.red(`\nError: ${error.message}`));
+        }
         process.exit(1);
     } finally {
         rl.close();
