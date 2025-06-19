@@ -68,6 +68,19 @@ function isValidPackageNameOrUrl(input) {
     return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
 }
 
+// Function to clean and validate a tag
+function cleanTag(tag) {
+    if (typeof tag !== 'string') return null;
+    // Convert to lowercase, replace invalid chars with hyphens, collapse multiple hyphens, trim hyphens
+    const cleaned = tag.toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    
+    const tagPattern = /^[a-z0-9-]+$/;
+    return (cleaned && tagPattern.test(cleaned)) ? cleaned : null;
+}
+
 // Function to probe server for minimal information
 async function probeServerMinimal(url) {
     const info = {
@@ -789,6 +802,32 @@ export async function runRegister() {
             // Unauthorized update for already-analyzed servers - skip all questions
             console.log(chalk.dim('\nSkipping questions for unauthorized update...'));
             description = introspectionResult.serverInfo?.description || `MCP server: ${packageOrUrl}`;
+            
+            // Clean up existing tags to match API requirements
+            if (existingServer.tags && Array.isArray(existingServer.tags)) {
+                const cleanedTags = [];
+                let hadInvalidTags = false;
+                
+                for (const tag of existingServer.tags) {
+                    const cleanedTag = cleanTag(tag);
+                    if (cleanedTag) {
+                        if (!cleanedTags.includes(cleanedTag)) { // Avoid duplicates
+                            cleanedTags.push(cleanedTag);
+                        }
+                        if (tag !== cleanedTag) {
+                            hadInvalidTags = true;
+                        }
+                    } else if (tag) {
+                        hadInvalidTags = true;
+                    }
+                }
+                
+                if (hadInvalidTags) {
+                    console.log(chalk.yellow('Note: Some existing tags were cleaned to match API requirements'));
+                }
+                
+                tags = cleanedTags;
+            }
         } else {
             // New registration or authorized update - ask all questions
             // Ensure readline is still active
@@ -818,17 +857,17 @@ export async function runRegister() {
             }
             
             // Parse and validate tags
-            const tagPattern = /^[a-z0-9-]+$/;
-            const rawTags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
+            const rawTags = tagsInput.split(',').map(tag => tag.trim()).filter(Boolean);
             tags = [];
             
             for (const tag of rawTags) {
-                // Clean up the tag - remove spaces and special characters
-                const cleanedTag = tag.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-                
-                if (cleanedTag && tagPattern.test(cleanedTag)) {
+                const cleanedTag = cleanTag(tag);
+                if (cleanedTag) {
                     if (!tags.includes(cleanedTag)) { // Avoid duplicates
                         tags.push(cleanedTag);
+                    }
+                    if (tag.toLowerCase() !== cleanedTag) {
+                        console.log(chalk.yellow(`Info: Tag "${tag}" was cleaned to "${cleanedTag}"`));
                     }
                 } else if (tag) {
                     console.log(chalk.yellow(`Warning: Skipping invalid tag "${tag}" (only lowercase letters, numbers, and hyphens allowed)`));
