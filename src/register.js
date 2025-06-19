@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHttpClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import crypto from 'crypto';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync } from 'fs';
@@ -75,17 +76,16 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
     
     try {
         if (isUrl) {
-            // HTTP/SSE transport
-            // If URL already ends with /sse, use it as is
-            // Otherwise, append /sse to the base URL
-            let sseUrl;
+            const url = new URL(packageOrUrl);
+            
+            // Check if URL ends with /sse - use deprecated SSE transport
             if (packageOrUrl.endsWith('/sse')) {
-                sseUrl = new URL(packageOrUrl);
+                // Use SSE transport for legacy SSE endpoints
+                transport = new SSEClientTransport(url);
             } else {
-                const baseUrl = new URL(packageOrUrl);
-                sseUrl = new URL('/sse', baseUrl);
+                // Use StreamableHttp transport for modern HTTP endpoints
+                transport = new StreamableHttpClientTransport(url);
             }
-            transport = new SSEClientTransport(sseUrl);
         } else {
             // STDIO transport for npm packages
             const actualTempDir = tempDir || mkdtempSync(join(tmpdir(), 'mcp-register-'));
