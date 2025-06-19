@@ -84,6 +84,15 @@ MCPFINDER_API_URL=http://localhost:8787 node src/register.js
 MCP_REGISTRY_SECRET=your-secret node src/register.js
 ```
 
+### Input Requirements
+
+#### Tags
+- Must contain only lowercase letters, numbers, and hyphens
+- Pattern: `^[a-z0-9-]+$`
+- Examples: `ai`, `github`, `productivity`, `code-analysis`
+- Invalid examples: `AI Tools`, `Code Analysis`, `testing apps, games`
+- The tool will automatically clean invalid characters and warn about skipped tags
+
 ## Other Commands
 
 - `/help` - Show help information
