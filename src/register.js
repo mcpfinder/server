@@ -148,7 +148,7 @@ async function probeServerMinimal(url) {
 }
 
 // Function to introspect MCP server
-async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = null) {
+export async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = null) {
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
     let transport;
     let client;
@@ -158,13 +158,33 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
         if (isUrl) {
             const url = new URL(packageOrUrl);
             
-            // Check if URL ends with /sse - use deprecated SSE transport
-            if (packageOrUrl.endsWith('/sse')) {
-                // Use SSE transport for legacy SSE endpoints
+            // Check if URL ends with /sse or is whenmeet - use SSE transport
+            if (packageOrUrl.endsWith('/sse') || packageOrUrl.includes('whenmeet.me')) {
+                // Use SSE transport for SSE endpoints
                 transport = new SSEClientTransport(url);
             } else {
-                // Use StreamableHTTP transport for modern HTTP endpoints
-                transport = new StreamableHTTPClientTransport(url);
+                // Try to detect if it's an SSE endpoint by making a GET request
+                try {
+                    const testResponse = await fetch(packageOrUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/event-stream',
+                            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+                        }
+                    });
+                    
+                    const contentType = testResponse.headers.get('content-type');
+                    if (contentType && contentType.includes('text/event-stream')) {
+                        // It's an SSE endpoint
+                        transport = new SSEClientTransport(url);
+                    } else {
+                        // Use StreamableHTTP transport for modern HTTP endpoints
+                        transport = new StreamableHTTPClientTransport(url);
+                    }
+                } catch (e) {
+                    // Default to StreamableHTTP if detection fails
+                    transport = new StreamableHTTPClientTransport(url);
+                }
             }
         } else {
             // STDIO transport for npm packages
@@ -186,7 +206,7 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
         
         // Add auth token if provided
         if (authToken && isUrl) {
-            // Create auth provider for OAuth-style authentication
+            // Create auth provider that works for both SSE and HTTP transports
             transport._authProvider = {
                 tokens: async () => ({
                     access_token: authToken,
@@ -194,10 +214,9 @@ async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = nul
                 })
             };
             
-            // Override the global fetch to add Authorization header as fallback
+            // Override fetch to ensure auth headers are always sent
             originalFetch = global.fetch;
             
-            // Replace global fetch temporarily
             global.fetch = async (url, options = {}) => {
                 // Only add auth header for requests to the MCP server
                 if (url.toString().startsWith(packageOrUrl)) {
