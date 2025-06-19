@@ -351,7 +351,8 @@ export async function runRegister() {
                 const checkResponse = await fetch(`${process.env.MCPFINDER_API_URL || 'https://mcpfinder.dev'}/api/v1/search?q=${encodeURIComponent(packageOrUrl)}&limit=1`);
                 if (checkResponse.ok) {
                     const searchResult = await checkResponse.json();
-                    if (searchResult.tools && searchResult.tools.length > 0 && searchResult.tools[0].url === packageOrUrl) {
+                    // API returns array directly, not object with tools property
+                    if (Array.isArray(searchResult) && searchResult.length > 0 && searchResult[0].url === packageOrUrl) {
                         isUpdate = true;
                         console.log(chalk.yellow('\n⚠️  This server is already registered. Updating capabilities only...'));
                     }
