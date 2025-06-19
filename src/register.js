@@ -636,10 +636,9 @@ export async function runRegister() {
                 throw questionError;
             }
             
-            let tagsInput, requiresApiKeyAnswer;
+            let tagsInput;
             try {
                 tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
-                requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
             } catch (questionError) {
                 console.error(chalk.red('\nError reading input:', questionError.message));
                 throw questionError;
@@ -653,8 +652,16 @@ export async function runRegister() {
                 if (!tags.includes('auth-required')) tags.push('auth-required');
             }
             
-            // Override requiresApiKey for servers that couldn't be introspected due to auth
+            // For servers that couldn't be introspected due to auth, requiresApiKey is already set
+            // For normal servers, ask the user
             if (!introspectionResult.isManual && !introspectionResult.isMinimal) {
+                let requiresApiKeyAnswer;
+                try {
+                    requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
+                } catch (questionError) {
+                    console.error(chalk.red('\nError reading input:', questionError.message));
+                    throw questionError;
+                }
                 requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
             }
             
@@ -698,13 +705,26 @@ export async function runRegister() {
                     
                     authInfo.type = authType;
                     
-                    if (authType === 'oauth') {
-                        authInfo.authInstructions = await askQuestion(rl, 'OAuth instructions (e.g., how to authenticate): ') || 'OAuth authentication required';
-                    } else if (authType === 'api-key') {
-                        authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key: ');
-                        authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                    // For minimal registration, use defaults based on probe info
+                    if (introspectionResult.isMinimal) {
+                        if (authType === 'oauth') {
+                            authInfo.authInstructions = introspectionResult.probeInfo?.auth?.details?.help || 'OAuth authentication required';
+                        } else if (authType === 'api-key') {
+                            authInfo.keyName = 'API_KEY';
+                            authInfo.authInstructions = 'Set the API key as an environment variable';
+                        } else {
+                            authInfo.authInstructions = 'Custom authentication required';
+                        }
                     } else {
-                        authInfo.authInstructions = await askQuestion(rl, 'Authentication instructions: ') || 'Custom authentication required';
+                        // For manual registration, ask for details
+                        if (authType === 'oauth') {
+                            authInfo.authInstructions = await askQuestion(rl, 'OAuth instructions (e.g., how to authenticate): ') || 'OAuth authentication required';
+                        } else if (authType === 'api-key') {
+                            authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key: ');
+                            authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                        } else {
+                            authInfo.authInstructions = await askQuestion(rl, 'Authentication instructions: ') || 'Custom authentication required';
+                        }
                     }
                 } else {
                     // Regular auth for introspected servers

@@ -446,21 +446,6 @@ async function add_mcp_server_config(input) {
         config[serversKey] = {};
     }
 
-    const originalCommandArray = finalDefinition.command; // Assuming it's an array initially
-
-    // Format command based on client type for compatibility
-    console.warn(`[add_mcp_server_config] Applying standard command/args formatting.`);
-    if (Array.isArray(originalCommandArray) && originalCommandArray.length > 0) {
-        finalDefinition.command = originalCommandArray[0]; // Default to command string
-        finalDefinition.args = originalCommandArray.slice(1); // Default to args array
-        console.warn(`[add_mcp_server_config] Formatted command: "${finalDefinition.command}", args: ${JSON.stringify(finalDefinition.args)}`);
-    } else {
-        // If source wasn't a valid array, ensure args is not present
-        finalDefinition.command = originalCommandArray; // Preserve original structure
-        delete finalDefinition.args;
-        console.error(`[add_mcp_server_config] Original command was not a non-empty array:`, originalCommandArray);
-    }
-
     // Add or update the server entry using the generated key
     config[serversKey][configKey] = finalDefinition;
 
