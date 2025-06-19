@@ -24,7 +24,13 @@ function createPromptInterface() {
 // Function to ask a question and get the answer
 function askQuestion(rl, query) {
     return new Promise((resolve, reject) => {
+        // Set a timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            reject(new Error('Input timeout - no response received'));
+        }, 60000); // 60 second timeout
+        
         rl.question(query, (answer) => {
+            clearTimeout(timeout);
             if (answer === undefined) {
                 reject(new Error('Input interrupted'));
             } else {
@@ -120,17 +126,27 @@ async function introspectMCPServer(packageOrUrl, tempDir = null) {
         };
         
     } catch (error) {
+        console.error(chalk.dim('Debug: Introspection error:', error.message));
         return {
             isValid: false,
-            error: error.message
+            error: error.message || 'Unknown error'
         };
     } finally {
         // Cleanup
-        if (client) {
-            await client.close().catch(() => {});
+        try {
+            if (client) {
+                await client.close();
+            }
+        } catch (e) {
+            console.error(chalk.dim('Debug: Error closing client:', e.message));
         }
-        if (transport) {
-            await transport.close().catch(() => {});
+        
+        try {
+            if (transport) {
+                await transport.close();
+            }
+        } catch (e) {
+            console.error(chalk.dim('Debug: Error closing transport:', e.message));
         }
     }
 }
@@ -250,6 +266,10 @@ async function submitToRegistry(manifest) {
 export async function runRegister() {
     console.log(chalk.bold.blue('\n📋 Register Your MCP Server with MCPfinder\n'));
     
+    // Ensure stdin doesn't close prematurely
+    process.stdin.resume();
+    process.stdin.setRawMode?.(false);
+    
     const rl = createPromptInterface();
     let tempDir = null;
     
@@ -273,21 +293,29 @@ export async function runRegister() {
             // Introspect the MCP server
             const spinner = ora('Connecting to MCP server and verifying capabilities...').start();
             
-            if (tempDir) {
-                // Clean up previous temp dir if it exists
-                try {
-                    rmSync(tempDir, { recursive: true, force: true });
-                } catch (e) {}
-            }
-            tempDir = !isUrl ? mkdtempSync(join(tmpdir(), 'mcp-register-')) : null;
-            introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
-            
-            if (!introspectionResult.isValid) {
-                spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
+            try {
+                if (tempDir) {
+                    // Clean up previous temp dir if it exists
+                    try {
+                        rmSync(tempDir, { recursive: true, force: true });
+                    } catch (e) {}
+                }
+                tempDir = !isUrl ? mkdtempSync(join(tmpdir(), 'mcp-register-')) : null;
+                introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
+                
+                if (!introspectionResult.isValid) {
+                    spinner.fail(`Not a valid MCP server: ${introspectionResult.error}`);
+                    console.log(chalk.yellow('Please try a different package or URL.\n'));
+                    packageOrUrl = ''; // Reset to ask again
+                } else {
+                    spinner.succeed('Successfully connected to MCP server');
+                }
+            } catch (introspectError) {
+                spinner.fail(`Failed to introspect: ${introspectError.message}`);
+                console.error(chalk.dim('Debug: Full error:', introspectError));
                 console.log(chalk.yellow('Please try a different package or URL.\n'));
                 packageOrUrl = ''; // Reset to ask again
-            } else {
-                spinner.succeed('Successfully connected to MCP server');
+                introspectionResult = null; // Reset to continue loop
             }
         }
         
@@ -309,18 +337,39 @@ export async function runRegister() {
             }
         }
         
+        // Add a small delay to ensure output is flushed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Collect additional information
-        console.log('\n');
+        // Ensure readline is still active
+        if (!rl) {
+            console.error(chalk.red('\nError: Readline interface was closed unexpectedly'));
+            throw new Error('Readline interface closed');
+        }
         const defaultDescription = introspectionResult.serverInfo?.description || '';
         const descriptionPrompt = defaultDescription 
-            ? `Provide a brief description of your MCP server [${defaultDescription}]: `
-            : 'Provide a brief description of your MCP server: ';
-        const description = await askQuestion(rl, descriptionPrompt) || defaultDescription;
+            ? `\nProvide a brief description of your MCP server [${defaultDescription}]: `
+            : '\nProvide a brief description of your MCP server: ';
         
-        const tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
+        let description;
+        try {
+            description = await askQuestion(rl, descriptionPrompt);
+            if (!description) description = defaultDescription;
+        } catch (questionError) {
+            console.error(chalk.red('\nError reading input:', questionError.message));
+            throw questionError;
+        }
+        
+        let tagsInput, requiresApiKeyAnswer;
+        try {
+            tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, e.g., ai, github, productivity): ');
+            requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
+        } catch (questionError) {
+            console.error(chalk.red('\nError reading input:', questionError.message));
+            throw questionError;
+        }
+        
         const tags = tagsInput.split(',').map(tag => tag.trim().toLowerCase()).filter(Boolean);
-        
-        const requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
         const requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
         
         let authInfo = {};
@@ -376,7 +425,8 @@ export async function runRegister() {
         if (error.message === 'Input interrupted') {
             console.log(chalk.yellow('\nRegistration cancelled by user'));
         } else {
-            console.error(chalk.red(`\nError: ${error.message}`));
+            console.error(chalk.red(`\nUnexpected error: ${error.message}`));
+            console.error(chalk.dim('Stack trace:', error.stack));
         }
         process.exit(1);
     } finally {
