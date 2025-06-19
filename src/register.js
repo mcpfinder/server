@@ -261,7 +261,7 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
     const isManual = tools.some(t => t.name === 'unknown') || 
                      resources.some(r => r.name === 'unknown') || 
                      prompts.some(p => p.name === 'unknown');
-    const isMinimal = capabilities.length === 0 && additionalInfo.isMinimal;
+    const isMinimal = additionalInfo.isMinimal;
     
     if (isMinimal) {
         // For minimal registration, just indicate unknown capabilities
@@ -389,7 +389,15 @@ async function submitToRegistry(manifest) {
         body: payload
     });
     
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    
+    try {
+        result = JSON.parse(responseText);
+    } catch (e) {
+        console.error('Failed to parse response:', responseText);
+        throw new Error('Invalid JSON response from server: ' + responseText.substring(0, 100));
+    }
     
     if (!response.ok) {
         throw new Error(result.error || result.message || 'Registration failed');
@@ -741,6 +749,7 @@ export async function runRegister() {
                         (introspectionResult.isMinimal ? 'Authentication required - capabilities unknown' : undefined),
             tags,
             requiresApiKey,
+            isMinimal: introspectionResult.isMinimal,
             ...authInfo
         });
         
