@@ -113,7 +113,16 @@ If no command is specified, `index.js` starts the MCP server.
 *   `register`: For server publishers to register their MCP server package with the MCPFinder registry.
     ```bash
     node index.js register
+    # or when installed globally:
+    npx -y @mcpfinder/server register
     ```
+    
+    This command will:
+    - Accept npm package names (e.g., `@username/my-mcp-server`) or HTTP/SSE endpoints
+    - Automatically connect to your MCP server to verify it's valid
+    - Introspect available tools, resources, and prompts
+    - Generate a manifest with your server's capabilities
+    - Submit it to the MCPfinder registry (requires `MCP_REGISTRY_SECRET`)
 
 **Getting Help:**
 *   `--help`: Display the help message detailing commands and options.
@@ -125,6 +134,7 @@ The server uses the following environment variables:
 
 *   `MCPFINDER_API_URL`: The base URL for the MCPfinder Registry API. Defaults to `https://mcpfinder.dev`.
 *   `MCP_PORT` (HTTP Mode Only): The port number for the server to listen on. Defaults to `6181`.
+*   `MCP_REGISTRY_SECRET` (Register Command Only): Authentication secret for registering servers. Contact lucas@mcpfinder.dev to obtain one.
 
 ## Provided Tools
 
