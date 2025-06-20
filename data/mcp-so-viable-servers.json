@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Example MCP Server",
+    "packageOrUrl": "example-mcp-server",
+    "type": "npm",
+    "description": "This server provides example functionality"
+  },
+  {
+    "name": "Python MCP Server",
+    "packageOrUrl": "python-mcp-server",
+    "type": "uvx",
+    "description": "A Python-based MCP server"
+  }
+]

@@ -1,0 +1,88 @@
+{
+  "summary": {
+    "total": 4,
+    "viable": 2,
+    "byType": {
+      "npm": 1,
+      "uvx": 1,
+      "http": 0,
+      "sse": 0,
+      "github": 0,
+      "unknown": 2
+    }
+  },
+  "viable": [
+    {
+      "name": "Example MCP Server",
+      "originalData": {
+        "name": "Example MCP Server",
+        "description": "This server provides example functionality",
+        "install": "npx example-mcp-server",
+        "author": "exampleuser",
+        "tags": [
+          "example",
+          "demo"
+        ]
+      },
+      "analysis": {
+        "type": "npm",
+        "viable": true,
+        "packageOrUrl": "example-mcp-server",
+        "details": {
+          "npmPackage": "example-mcp-server"
+        }
+      }
+    },
+    {
+      "name": "Python MCP Server",
+      "originalData": {
+        "name": "Python MCP Server",
+        "description": "A Python-based MCP server",
+        "command": "uvx python-mcp-server",
+        "config": {
+          "install": "uvx python-mcp-server"
+        }
+      },
+      "analysis": {
+        "type": "uvx",
+        "viable": true,
+        "packageOrUrl": "python-mcp-server",
+        "details": {
+          "uvxPackage": "python-mcp-server"
+        }
+      }
+    }
+  ],
+  "nonViable": [
+    {
+      "name": "HTTP API Server",
+      "originalData": {
+        "name": "HTTP API Server",
+        "description": "REST API MCP server",
+        "url": "https://api.example.com/mcp",
+        "type": "http"
+      },
+      "analysis": {
+        "type": "unknown",
+        "viable": false,
+        "packageOrUrl": null,
+        "details": {}
+      }
+    },
+    {
+      "name": "SSE Stream Server",
+      "originalData": {
+        "name": "SSE Stream Server",
+        "description": "Server-sent events MCP server",
+        "endpoint": "https://stream.example.com/sse",
+        "install": "Connect to https://stream.example.com/sse"
+      },
+      "analysis": {
+        "type": "unknown",
+        "viable": false,
+        "packageOrUrl": null,
+        "details": {}
+      }
+    }
+  ]
+}

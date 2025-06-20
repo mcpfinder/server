@@ -1,0 +1,482 @@
+[
+  {
+    "name": "weather-service MCP server",
+    "author": "duan-li",
+    "url": "https://mcp.so/server/mcp-weather-server-example/duan-li",
+    "command": "uvx",
+    "args": [
+      "serper-mcp-server\\r\\n```\\r\\n\\r\\nOr"
+    ],
+    "package": "se",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "awesome-awesome-mcp-servers",
+    "author": "esc5221",
+    "url": "https://mcp.so/server/awesome-awesome-mcp-servers/esc5221",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Documentation Server",
+    "author": "mahawi1992",
+    "url": "https://mcp.so/server/mcp-documentation-server/mahawi1992",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Shell MCP Server",
+    "author": "odysseus0",
+    "url": "https://mcp.so/server/mcp-server-shell/odysseus0",
+    "command": "uvx",
+    "args": [
+      "tool"
+    ],
+    "package": "tool",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "scaflog-zoho-mcp-server MCP server",
+    "author": "mastercode-io",
+    "url": "https://mcp.so/server/scaflog-zoho-mcp-server/mastercode-io",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Angle One MCP Server",
+    "author": "baba786",
+    "url": "https://mcp.so/server/angleone-mcp-server/baba786",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "isolated-commands-mcp-server MCP Server",
+    "author": "mikegehard",
+    "url": "https://mcp.so/server/isolated-commands-mcp-server/mikegehard",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Contentful MCP Server",
+    "author": "ivo-toby",
+    "url": "https://mcp.so/server/contentful-mcp/ivo-toby",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Perplexity MCP Server",
+    "author": "spragginsdesigns",
+    "url": "https://mcp.so/server/perplexity-mcp-server/spragginsdesigns",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Server Replicate",
+    "author": "gerred",
+    "url": "https://mcp.so/server/mcp-server-replicate/gerred",
+    "command": "uvx",
+    "args": [
+      "install"
+    ],
+    "package": "i",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "LibSQL Model Context Protocol Server",
+    "author": "nicholasq",
+    "url": "https://mcp.so/server/mcp-server-libsql/nicholasq",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Java-MCPlugin-ChallengeServerBungeePlugin",
+    "author": "Nikogenia",
+    "url": "https://mcp.so/server/Java-MCPlugin-ChallengeServerBungeePlugin/Nikogenia",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "OpenAPI MCP Server",
+    "author": "ivo-toby",
+    "url": "https://mcp.so/server/mcp-openapi-server/ivo-toby",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "mcp-server-bluesky",
+    "author": "morinokami",
+    "url": "https://mcp.so/server/mcp-server-bluesky/morinokami",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "",
+    "author": "orbit-logistics",
+    "url": "https://mcp.so/server/notion-mcp-server/orbit-logistics",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "My first MCP server",
+    "author": "yusukebe",
+    "url": "https://mcp.so/server/my-first-mcp-server/yusukebe",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "WCGW",
+    "author": "rusiaaman",
+    "url": "https://mcp.so/server/wcgw-vscode/rusiaaman",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "mcp-server-llmling",
+    "author": "phil65",
+    "url": "https://mcp.so/server/mcp-server-llmling/phil65",
+    "command": "uvx",
+    "args": [
+      "mcp-server-llmling@latest\\n```\\n\\n###"
+    ],
+    "package": "mcp-se",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP_server_weather",
+    "author": "mathemagie",
+    "url": "https://mcp.so/server/MCP_server_weather/mathemagie",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "convex-mcp-server MCP Server",
+    "author": "handfuloflight",
+    "url": "https://mcp.so/server/convex-mcp-server/handfuloflight",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Illustrator MCP Server",
+    "author": "spencerhhubert",
+    "url": "https://mcp.so/server/illustrator-mcp-server/spencerhhubert",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "SmallCloud MCP Server Demo",
+    "author": "SmallCloudCo",
+    "url": "https://mcp.so/server/smallcloud-mcp-server/SmallCloudCo",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Quarkus Model Context Protocol (MCP) Server",
+    "author": "quarkiverse",
+    "url": "https://mcp.so/server/quarkus-mcp-server/quarkiverse",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "Tavily MCP Server",
+    "author": "RamXX",
+    "url": "https://mcp.so/server/mcp-tavily/RamXX",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Financial Advisor",
+    "author": "dgormly",
+    "url": "https://mcp.so/server/mcp-financial-advisor/dgormly",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "BOLD MCP Server",
+    "author": "Lespernater",
+    "url": "https://mcp.so/server/mcp-server-bold/Lespernater",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "duckduckgo-web-search MCP Server",
+    "author": "Sunwood-ai-labs",
+    "url": "https://mcp.so/server/duckduckgo-web-search/Sunwood-ai-labs",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Google Calendar Server",
+    "author": "markelaugust74",
+    "url": "https://mcp.so/server/mcp-google-calendar/markelaugust74",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCPE_servers",
+    "author": "StrongApps",
+    "url": "https://mcp.so/server/MCPE_servers/StrongApps",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Server-Client Example",
+    "author": "joeBlockchain",
+    "url": "https://mcp.so/server/mcp-server-client/joeBlockchain",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "SingleStore MCP Server",
+    "author": "madhukarkumar",
+    "url": "https://mcp.so/server/singlestore-mcp-server/madhukarkumar",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Development Server",
+    "author": "dillip285",
+    "url": "https://mcp.so/server/mcp-dev-server/dillip285",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP GitHub Repository Server",
+    "author": "loglmhq",
+    "url": "https://mcp.so/server/mcp-server-github-repo/loglmhq",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Rust CLI server template",
+    "author": "TeamDman",
+    "url": "https://mcp.so/server/mcp-server-hello/TeamDman",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Substack Server",
+    "author": "michalnaka",
+    "url": "https://mcp.so/server/mcp-substack/michalnaka",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "test-server MCP server",
+    "author": "jtorreggiani",
+    "url": "https://mcp.so/server/test-python-mcp-server/jtorreggiani",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "MCP Server for Cursor",
+    "author": "AntDX316",
+    "url": "https://mcp.so/server/MCP-Server/AntDX316",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "mcPixelmonServer",
+    "author": "Odranoel135",
+    "url": "https://mcp.so/server/mcPixelmonServer/Odranoel135",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "alphaguts",
+    "author": "amir16yp",
+    "url": "https://mcp.so/server/alphaguts/amir16yp",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  },
+  {
+    "name": "mcp-cps-data MCP server",
+    "author": "mdagost",
+    "url": "https://mcp.so/server/mcp-cps-data/mdagost",
+    "command": "uvx",
+    "args": [
+      "可执行文件的目录）添加到系统的"
+    ],
+    "package": "可执行文件的目录）添加到系统的",
+    "transport": "stdio",
+    "viability": "uvx"
+  }
+]

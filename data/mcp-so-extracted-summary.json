@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-06-20T19:44:13.774Z",
+  "totalViable": 46,
+  "httpEndpoints": 38,
+  "npmPackages": 8,
+  "methodology": "extracted-from-analyzer-log",
+  "source": "mcp-so-bulk-analyzer timeout output + known packages"
+}

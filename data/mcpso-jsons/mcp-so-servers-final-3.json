@@ -1,0 +1,373 @@
+[
+  {
+    "name": "Cloudflare MCP Server@cloudflare",
+    "url": "https://mcp.so/server/mcp-server-cloudflare/cloudflare",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-cloudflare",
+    "authorFromUrl": "cloudflare"
+  },
+  {
+    "name": "mcp-gsuite MCP server@MarkusPfundsteinMCP Server to interact with Google Gsuite prodcuts",
+    "url": "https://mcp.so/server/mcp-gsuite/MarkusPfundstein",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-gsuite",
+    "authorFromUrl": "MarkusPfundstein"
+  },
+  {
+    "name": "OpenRPC MCP Server@shanejonasA Model Context Protocol (MCP) server that provides JSON-RPC functionality through OpenRPC.",
+    "url": "https://mcp.so/server/openrpc-mpc-server/shanejonas",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "openrpc-mpc-server",
+    "authorFromUrl": "shanejonas"
+  },
+  {
+    "name": "MCP Server@tcpipukProvides tools to clients over the Model Context Protocol",
+    "url": "https://mcp.so/server/mcp-server/tcpipuk",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server",
+    "authorFromUrl": "tcpipuk"
+  },
+  {
+    "name": "MCP Web Research Server@mzxraiMCP web research server (give Claude real-time info from the web)",
+    "url": "https://mcp.so/server/mcp-webresearch/mzxrai",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-webresearch",
+    "authorFromUrl": "mzxrai"
+  },
+  {
+    "name": "Claude MCP Server Collection@syedazharmbnr1MCP Server implementation for Claude",
+    "url": "https://mcp.so/server/ClaudeMCPServer/syedazharmbnr1",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "ClaudeMCPServer",
+    "authorFromUrl": "syedazharmbnr1"
+  },
+  {
+    "name": "Mcp Directory@chatmcpdirectory for Awesome MCP Servers",
+    "url": "https://mcp.so/server/mcp-directory/chatmcp",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-directory",
+    "authorFromUrl": "chatmcp"
+  },
+  {
+    "name": "Portfolio Service Monorepo@itay1542A MCP (Model Context Protocol) server that implements popular brokers' APIs and more",
+    "url": "https://mcp.so/server/brokers-mcp/itay1542",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "brokers-mcp",
+    "authorFromUrl": "itay1542"
+  },
+  {
+    "name": "LlamaCloud MCP Server@run-llamaA MCP server connecting to managed indexes on LlamaCloud",
+    "url": "https://mcp.so/server/mcp-server-llamacloud/run-llama",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-llamacloud",
+    "authorFromUrl": "run-llama"
+  },
+  {
+    "name": "Awesome MCP Servers@appcypherAwesome MCP Servers - A curated list of Model Context Protocol servers",
+    "url": "https://mcp.so/server/awesome-mcp-servers/appcypher",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "awesome-mcp-servers",
+    "authorFromUrl": "appcypher"
+  },
+  {
+    "name": "Browserbase MCP Server@browserbaseAllow LLMs to control a browser with Browserbase and Stagehand",
+    "url": "https://mcp.so/server/mcp-server-browserbase/browserbase",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-browserbase",
+    "authorFromUrl": "browserbase"
+  },
+  {
+    "name": "Workers MCP Server@geelenTalk to a Cloudflare Worker from Claude Desktop!",
+    "url": "https://mcp.so/server/workers-mcp-server/geelen",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "workers-mcp-server",
+    "authorFromUrl": "geelen"
+  },
+  {
+    "name": "Neon MCP Server@neondatabaseMCP server for interacting with Neon Management API and databases",
+    "url": "https://mcp.so/server/mcp-server-neon/neondatabase",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-neon",
+    "authorFromUrl": "neondatabase"
+  },
+  {
+    "name": "ArXiv MCP Server@blazickjpA Model Context Protocol server for searching and analyzing arXiv papers",
+    "url": "https://mcp.so/server/arxiv-mcp-server/blazickjp",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "arxiv-mcp-server",
+    "authorFromUrl": "blazickjp"
+  },
+  {
+    "name": "Exa MCP Server 🔍@exa-labsClaude can perform Web Search | Exa with MCP (Model Context Protocol)",
+    "url": "https://mcp.so/server/exa-mcp-server/exa-labs",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "exa-mcp-server",
+    "authorFromUrl": "exa-labs"
+  },
+  {
+    "name": "MySQL MCP Server@designcomputerA Model Context Protocol (MCP) server that enables secure interaction with MySQL databases",
+    "url": "https://mcp.so/server/mysql_mcp_server/designcomputer",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mysql_mcp_server",
+    "authorFromUrl": "designcomputer"
+  },
+  {
+    "name": "Mcp Servers@aadimish",
+    "url": "https://mcp.so/server/mcp-servers/aadimish",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-servers",
+    "authorFromUrl": "aadimish"
+  },
+  {
+    "name": "🐳 docker-mcp@QuantGeekDevA docker MCP Server (modelcontextprotocol)",
+    "url": "https://mcp.so/server/docker-mcp/QuantGeekDev",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "docker-mcp",
+    "authorFromUrl": "QuantGeekDev"
+  },
+  {
+    "name": "MCppServer@Noeli14Fast and super efficient Minecraft Server written in C++",
+    "url": "https://mcp.so/server/MCppServer/Noeli14",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "MCppServer",
+    "authorFromUrl": "Noeli14"
+  },
+  {
+    "name": "amazon-fresh-server MCP Server@Alec2435An amazon fresh mcp server",
+    "url": "https://mcp.so/server/amazon-fresh-server/Alec2435",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "amazon-fresh-server",
+    "authorFromUrl": "Alec2435"
+  },
+  {
+    "name": "OpenAI MCP Server@thadius83mcp-server-openai with o3-mini support",
+    "url": "https://mcp.so/server/mcp-server-openai/thadius83",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-openai",
+    "authorFromUrl": "thadius83"
+  },
+  {
+    "name": "applescript-mcp MCP Server@joshrutkowskiA macOS AppleScript MCP server",
+    "url": "https://mcp.so/server/applescript-mcp/joshrutkowski",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "applescript-mcp",
+    "authorFromUrl": "joshrutkowski"
+  },
+  {
+    "name": "Notion MCP Server@suekou",
+    "url": "https://mcp.so/server/mcp-notion-server/suekou",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-notion-server",
+    "authorFromUrl": "suekou"
+  },
+  {
+    "name": "python_local MCP Server@Alec2435MCP Server to run python code locally",
+    "url": "https://mcp.so/server/python_mcp/Alec2435",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "python_mcp",
+    "authorFromUrl": "Alec2435"
+  },
+  {
+    "name": "VikingDB MCP server@KashiwaBytea mcp server for vikingdb store and search",
+    "url": "https://mcp.so/server/vikingdb-mcp-server/KashiwaByte",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "vikingdb-mcp-server",
+    "authorFromUrl": "KashiwaByte"
+  },
+  {
+    "name": "MCP Server for Prometheus@CaesarYangsA Model Context Protocol (MCP) server enabling LLMs to query, analyze, and interact with Prometheus databases through predefined routes.",
+    "url": "https://mcp.so/server/prometheus_mcp_server/CaesarYangs",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "prometheus_mcp_server",
+    "authorFromUrl": "CaesarYangs"
+  },
+  {
+    "name": "Pandora's Shell@ZelaronMCP server enabling AI assistants to execute terminal commands through a secure shell interface",
+    "url": "https://mcp.so/server/Pandoras-Shell/Zelaron",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "Pandoras-Shell",
+    "authorFromUrl": "Zelaron"
+  },
+  {
+    "name": "MCP Server for Data Exploration@reading-plus-ai",
+    "url": "https://mcp.so/server/mcp-server-data-exploration/reading-plus-ai",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "mcp-server-data-exploration",
+    "authorFromUrl": "reading-plus-ai"
+  },
+  {
+    "name": "Windows CLIMCP server for secure command-line interactions on Windows systems, enabling controlled access to PowerShell, CMD, and Git Bash shells.",
+    "url": "https://mcp.so/server/windows-cli",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "server",
+    "authorFromUrl": "windows-cli"
+  },
+  {
+    "name": "OpenRPCInteract with and discover JSON-RPC APIs via OpenRPC.",
+    "url": "https://mcp.so/server/openrpc",
+    "extractedAt": "2025-06-20T19:10:19.119Z",
+    "slug": "server",
+    "authorFromUrl": "openrpc"
+  },
+  {
+    "name": "Any Chat CompletionsInteract with any OpenAI SDK Compatible Chat Completions API like OpenAI, Perplexity, Groq, xAI and many more.",
+    "url": "https://mcp.so/server/any-chat-completions",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "any-chat-completions"
+  },
+  {
+    "name": "Google DriveFile access and search capabilities for Google Drive",
+    "url": "https://mcp.so/server/gdrive",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "gdrive"
+  },
+  {
+    "name": "AWSPerform operations on your AWS resources using an LLM",
+    "url": "https://mcp.so/server/aws",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "aws"
+  },
+  {
+    "name": "LlamaCloud@marcusschiesser(by marcusschiesser) - Integrate the data stored in a managed index on LlamaCloud",
+    "url": "https://mcp.so/server/llamacloud/marcusschiesser",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "llamacloud",
+    "authorFromUrl": "marcusschiesser"
+  },
+  {
+    "name": "TinybirdInteract with Tinybird serverless ClickHouse platform",
+    "url": "https://mcp.so/server/tinybird",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "tinybird"
+  },
+  {
+    "name": "MySQLMySQL database integration with configurable access controls and schema inspection",
+    "url": "https://mcp.so/server/mysql",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "mysql"
+  },
+  {
+    "name": "InoyuInteract with an Apache Unomi CDP customer data platform to retrieve and update customer profiles",
+    "url": "https://mcp.so/server/inoyu",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "inoyu"
+  },
+  {
+    "name": "TodoistInteract with Todoist to manage your tasks.",
+    "url": "https://mcp.so/server/todoist",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "todoist"
+  },
+  {
+    "name": "BigQuery@LucasHild(by LucasHild) - This server enables LLMs to inspect database schemas and execute queries on BigQuery.",
+    "url": "https://mcp.so/server/bigquery/LucasHild",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "bigquery",
+    "authorFromUrl": "LucasHild"
+  },
+  {
+    "name": "Playwright MCPThis MCP Server will help you run browser automation and webscraping using Playwright",
+    "url": "https://mcp.so/server/playwright-mcp",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "playwright-mcp"
+  },
+  {
+    "name": "SqliteDatabase interaction and business intelligence capabilities",
+    "url": "https://mcp.so/server/sqlite",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "sqlite"
+  },
+  {
+    "name": "E2BRun code in secure sandboxes hosted by E2B",
+    "url": "https://mcp.so/server/e2b",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "e2b"
+  },
+  {
+    "name": "Spotify MCPThis MCP allows an LLM to play and use Spotify.",
+    "url": "https://mcp.so/server/spotify-mcp",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "spotify-mcp"
+  },
+  {
+    "name": "NeonInteract with the Neon serverless Postgres platform",
+    "url": "https://mcp.so/server/neon",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "neon"
+  },
+  {
+    "name": "RaygunInteract with your crash reporting and real using monitoring data on your Raygun account",
+    "url": "https://mcp.so/server/raygun",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "raygun"
+  },
+  {
+    "name": "LinearAllows LLM to interact with Linear's API for project management, including searching, creating, and updating issues.",
+    "url": "https://mcp.so/server/linear",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "linear"
+  },
+  {
+    "name": "mcp-installer - A MCP Server to install MCP Servers@anaisbettsAn MCP server that installs other MCP servers for you",
+    "url": "https://mcp.so/server/mcp-installer/anaisbetts",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "mcp-installer",
+    "authorFromUrl": "anaisbetts"
+  },
+  {
+    "name": "CloudflareDeploy, configure & interrogate your resources on the Cloudflare developer platform (e.g. Workers/KV/R2/D1)",
+    "url": "https://mcp.so/server/cloudflare",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "cloudflare"
+  },
+  {
+    "name": "GitTools to read, search, and manipulate Git repositories",
+    "url": "https://mcp.so/server/git",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "git"
+  },
+  {
+    "name": "MemoryKnowledge graph-based persistent memory system",
+    "url": "https://mcp.so/server/memory",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "server",
+    "authorFromUrl": "memory"
+  },
+  {
+    "name": "Illumio MCP Server@alexgollerThe first MCP server for cybersecurity",
+    "url": "https://mcp.so/server/illumio-mcp-server/alexgoller",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "illumio-mcp-server",
+    "authorFromUrl": "alexgoller"
+  },
+  {
+    "name": "mcp-server-agenda@alexgollerA model context protocol server to interface the agenda note taking software using x-callback-url",
+    "url": "https://mcp.so/server/mcp-server-agenda/alexgoller",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "mcp-server-agenda",
+    "authorFromUrl": "alexgoller"
+  },
+  {
+    "name": "JetBrains MCP Proxy Server@JetBrainsA model context protocol server to work with JetBrains IDEs: IntelliJ, PyCharm, WebStorm, etc. Also, works with Android Studio",
+    "url": "https://mcp.so/server/mcp-jetbrains/JetBrains",
+    "extractedAt": "2025-06-20T19:10:22.524Z",
+    "slug": "mcp-jetbrains",
+    "authorFromUrl": "JetBrains"
+  }
+]

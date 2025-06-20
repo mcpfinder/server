@@ -1,0 +1,26 @@
+[
+  {
+    "name": "weather-service MCP server",
+    "author": "duan-li",
+    "url": "https://mcp.so/server/mcp-weather-server-example/duan-li",
+    "command": "uvx",
+    "package": "se",
+    "description": "duan-liClaude Model Context Protocol Weather Server Example",
+    "tags": [
+      "uvx",
+      "mcp-so"
+    ]
+  },
+  {
+    "name": "mcp-server-llmling",
+    "author": "phil65",
+    "url": "https://mcp.so/server/mcp-server-llmling/phil65",
+    "command": "uvx",
+    "package": "mcp-se",
+    "description": "phil65MCP (Model context protocol) server with LLMling backend",
+    "tags": [
+      "uvx",
+      "mcp-so"
+    ]
+  }
+]
