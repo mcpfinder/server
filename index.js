@@ -45,8 +45,6 @@ Commands:
   (no command)      Run the server (default: stdio transport)
   install           For users and AI clients: Run the interactive setup to configure a client
   register          For server publishers: Register your MCP server package with the MCPFinder registry (beta)
-  scrape            Run automated scraping to discover new MCP servers (use --once for single run)
-  schedule-scraper  Start the daily scraper scheduler
 
 Options (for running the server):
   --http            Run the server locally in HTTP mode with SSE support. Default is stdio transport.
@@ -71,12 +69,10 @@ const showHelp = args.includes('--help');
 // Parse for commands with their aliases
 const isSetupCommand = args.includes('setup') || args.includes('install') || args.includes('init');
 const isRegisterCommand = args.includes('register');
-const isScrapeCommand = args.includes('scrape');
-const isScheduleScraperCommand = args.includes('schedule-scraper');
 
 // Define known flags and commands
 const knownFlags = ['--help', '--http', '--port', '--api-url', '--headless', '--description', '--tags', '--auth-token', '--requires-api-key', '--auth-type', '--key-name', '--auth-instructions', '--once', '--confirm'];
-const knownCommands = ['setup', 'install', 'init', 'register', 'scrape', 'schedule-scraper'];
+const knownCommands = ['setup', 'install', 'init', 'register'];
 
 // Check for unknown commands
 const hasUnknownCommand = (() => {
@@ -1134,38 +1130,8 @@ if (isSetupCommand) {
       process.exit(1);
     }
   })();
-} else if (isScrapeCommand) {
-  (async () => {
-    try {
-      console.log("Running MCP server scraping...");
-      const runOnce = args.includes('--once');
-      
-      if (runOnce) {
-        const { runOnce: runScrapeOnce } = await import('./src/daily-scraper.js');
-        await runScrapeOnce();
-      } else {
-        const { runAllScrapers } = await import('./src/scrapers/run-all-scrapers.js');
-        await runAllScrapers();
-      }
-      
-      process.exit(0);
-    } catch (error) {
-      console.error("Scraping failed:", error);
-      process.exit(1);
-    }
-  })();
-} else if (isScheduleScraperCommand) {
-  (async () => {
-    try {
-      console.log("Starting daily scraper scheduler...");
-      const { startDailyScheduler } = await import('./src/daily-scraper.js');
-      await startDailyScheduler();
-      // Keep running
-    } catch (error) {
-      console.error("Failed to start daily scheduler:", error);
-      process.exit(1);
-    }
-  })();
+// Scraping commands have been moved to /scraping-tools/
+// To run scrapers: node /path/to/scraping-tools/scrapers/run-all-scrapers.js
 } else {
   // Proceed with normal server startup only if no special command is used
   const finalPort = cliPort ? parseInt(cliPort, 10) : (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : DEFAULT_PORT);
