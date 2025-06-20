@@ -1130,8 +1130,6 @@ if (isSetupCommand) {
       process.exit(1);
     }
   })();
-// Scraping commands have been moved to /scraping-tools/
-// To run scrapers: node /path/to/scraping-tools/scrapers/run-all-scrapers.js
 } else {
   // Proceed with normal server startup only if no special command is used
   const finalPort = cliPort ? parseInt(cliPort, 10) : (process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : DEFAULT_PORT);
