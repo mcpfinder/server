@@ -45,6 +45,8 @@ Commands:
   (no command)      Run the server (default: stdio transport)
   install           For users and AI clients: Run the interactive setup to configure a client
   register          For server publishers: Register your MCP server package with the MCPFinder registry (beta)
+  scrape            Run automated scraping to discover new MCP servers (use --once for single run)
+  schedule-scraper  Start the daily scraper scheduler
 
 Options (for running the server):
   --http            Run the server locally in HTTP mode with SSE support. Default is stdio transport.
@@ -69,25 +71,33 @@ const showHelp = args.includes('--help');
 // Parse for commands with their aliases
 const isSetupCommand = args.includes('setup') || args.includes('install') || args.includes('init');
 const isRegisterCommand = args.includes('register');
+const isScrapeCommand = args.includes('scrape');
+const isScheduleScraperCommand = args.includes('schedule-scraper');
 
 // Define known flags and commands
-const knownFlags = ['--help', '--http', '--port', '--api-url'];
-const knownCommands = ['setup', 'install', 'init', 'register'];
+const knownFlags = ['--help', '--http', '--port', '--api-url', '--headless', '--description', '--tags', '--auth-token', '--requires-api-key', '--auth-type', '--key-name', '--auth-instructions', '--once', '--confirm'];
+const knownCommands = ['setup', 'install', 'init', 'register', 'scrape', 'schedule-scraper'];
 
 // Check for unknown commands
 const hasUnknownCommand = (() => {
+  let foundCommand = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     // Skip flags and their values
     if (knownFlags.includes(arg)) {
       // If this is a flag that takes a value, skip the next argument
-      if (arg === '--port' || arg === '--api-url') {
+      if (arg === '--port' || arg === '--api-url' || arg === '--description' || arg === '--tags' || arg === '--auth-token' || arg === '--auth-type' || arg === '--key-name' || arg === '--auth-instructions' || arg === '--confirm') {
         i++;
       }
       continue;
     }
     // If it's a known command, it's valid
     if (knownCommands.includes(arg)) {
+      foundCommand = true;
+      continue;
+    }
+    // If we found a command already, this might be a command argument
+    if (foundCommand) {
       continue;
     }
     // Otherwise, it's an unknown command
@@ -531,7 +541,17 @@ async function add_mcp_server_config(input) {
         console.error(`[add_mcp_server_config] Using command from fetched manifest installation: ${JSON.stringify(commandToUse)}`);
       } else {
         // Second priority: Generate command based on URL if no API command provided
-        if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
+        if (manifest.url && manifest.url.includes('github.com/')) {
+          // GitHub repos can't be installed automatically
+          console.error(`[add_mcp_server_config] GitHub repository detected, cannot auto-install`);
+          return { 
+            content: [{ 
+              type: 'text', 
+              text: `Error: GitHub repositories cannot be installed automatically.\n\nThis server (${manifest.url}) needs to be cloned and installed manually:\n1. Clone the repository: git clone ${manifest.url}\n2. Follow the installation instructions in the repository\n3. Configure the server manually in your MCP client\n\nFor more information, visit the repository.`
+            }], 
+            isError: true 
+          };
+        } else if (manifest.url && (manifest.url.startsWith('http://') || manifest.url.startsWith('https://'))) {
           commandToUse = ['npx', 'mcp-remote', manifest.url];
           console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(commandToUse)}`);
         } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
@@ -1083,7 +1103,27 @@ if (isSetupCommand) {
     try {
       console.log("Running MCP server registration...");
       const { runRegister } = await import('./src/register.js');
-      await runRegister();
+      
+      // Extract headless mode options
+      const headlessOptions = {
+        headless: args.includes('--headless'),
+        packageOrUrl: args.find((arg, i) => i > 0 && args[i-1] === 'register' && !arg.startsWith('--')),
+        description: getArgValue('--description'),
+        tags: getArgValue('--tags'),
+        authToken: getArgValue('--auth-token'),
+        requiresApiKey: args.includes('--requires-api-key') ? 'y' : (args.includes('--headless') ? 'n' : undefined),
+        authType: getArgValue('--auth-type') || 'api-key',
+        keyName: getArgValue('--key-name'),
+        authInstructions: getArgValue('--auth-instructions'),
+        confirm: getArgValue('--confirm') || (args.includes('--headless') ? 'y' : undefined),
+        manualCapabilities: getArgValue('--manual-capabilities') || (args.includes('--headless') ? 'n' : undefined),
+        hasTools: getArgValue('--has-tools') || (args.includes('--headless') ? 'y' : undefined),
+        hasResources: getArgValue('--has-resources') || (args.includes('--headless') ? 'n' : undefined),
+        hasPrompts: getArgValue('--has-prompts') || (args.includes('--headless') ? 'n' : undefined),
+        useUvx: args.includes('--use-uvx')
+      };
+      
+      await runRegister(headlessOptions);
       process.exit(0);
     } catch (error) {
       if (error.code === 'ERR_MODULE_NOT_FOUND') {
@@ -1091,6 +1131,38 @@ if (isSetupCommand) {
       } else {
           console.error("Registration failed:", error);
       }
+      process.exit(1);
+    }
+  })();
+} else if (isScrapeCommand) {
+  (async () => {
+    try {
+      console.log("Running MCP server scraping...");
+      const runOnce = args.includes('--once');
+      
+      if (runOnce) {
+        const { runOnce: runScrapeOnce } = await import('./src/daily-scraper.js');
+        await runScrapeOnce();
+      } else {
+        const { runAllScrapers } = await import('./src/scrapers/run-all-scrapers.js');
+        await runAllScrapers();
+      }
+      
+      process.exit(0);
+    } catch (error) {
+      console.error("Scraping failed:", error);
+      process.exit(1);
+    }
+  })();
+} else if (isScheduleScraperCommand) {
+  (async () => {
+    try {
+      console.log("Starting daily scraper scheduler...");
+      const { startDailyScheduler } = await import('./src/daily-scraper.js');
+      await startDailyScheduler();
+      // Keep running
+    } catch (error) {
+      console.error("Failed to start daily scheduler:", error);
       process.exit(1);
     }
   })();

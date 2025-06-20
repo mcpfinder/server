@@ -7,6 +7,69 @@ MCPfinder Server is a CLI tool for discovering and registering MCP (Model Contex
 
 The `register` command allows users to submit MCP servers to the MCPfinder registry.
 
+### Headless Mode
+
+The registration command now supports headless (automated) operation for batch processing and automation:
+
+```bash
+# Headless registration with all parameters
+node index.js register package-name --headless --description "My MCP server" --tags "ai,productivity" --auth-token "your-token"
+
+# Minimal headless registration (uses defaults)
+node index.js register @myorg/mcp-server --headless
+
+# Register a Python package
+node index.js register mcp-python-server --headless --use-uvx --description "Python MCP server"
+```
+
+#### Headless Parameters
+
+- `--headless` - Enable headless mode (no interactive prompts)
+- `--description "text"` - Server description
+- `--tags "tag1,tag2"` - Comma-separated tags
+- `--auth-token "token"` - Authentication token if server requires auth
+- `--requires-api-key` - Flag if server requires API key
+- `--auth-type "type"` - Authentication type (oauth/api-key/custom)
+- `--key-name "ENV_VAR"` - Environment variable name for API key
+- `--auth-instructions "text"` - Instructions for authentication
+- `--use-uvx` - Use uvx (Python package runner) instead of npx
+
+## Automated Discovery System
+
+MCPfinder includes automated scrapers that discover new MCP servers from various sources and register them daily.
+
+### Available Scrapers
+
+1. **MCP.so Feed** - Monitors https://mcp.so/feed for new server announcements
+2. **GitHub Repositories** - Scans modelcontextprotocol/servers and wong2/awesome-mcp-servers
+3. **MCPServers.org** - Parses mcpservers.org website for server listings
+4. **Glama.ai** - Monitors glama.ai/mcp/servers for new additions
+
+**Important**: The scrapers automatically skip GitHub repositories as they require manual installation. Only npm packages and SSE/HTTP servers are registered automatically.
+
+### Running Scrapers
+
+```bash
+# Run all scrapers once
+node index.js scrape
+
+# Run scrapers once and exit (for cron jobs)
+node index.js scrape --once
+
+# Start daily scheduler (runs at 6 AM UTC)
+node index.js schedule-scraper
+
+# View scraper results log
+node src/scrapers/view-log.js
+```
+
+### Environment Variables for Automation
+
+- `GITHUB_TOKEN` - GitHub token for higher API rate limits
+- `SCRAPER_SCHEDULE` - Cron schedule (default: "0 6 * * *")
+- `WEBHOOK_URL` - Slack/Discord webhook for notifications
+- `RUN_IMMEDIATELY=true` - Run immediately when scheduler starts
+
 ### Usage
 ```bash
 npx -y @mcpfinder/server register
@@ -16,7 +79,8 @@ npx -y @mcpfinder/server register
 
 1. **Automatic Introspection**: Connects to the MCP server to discover capabilities
 2. **Multi-Transport Support**: 
-   - STDIO for npm packages
+   - STDIO for npm packages via npx
+   - STDIO for Python packages via uvx
    - SSE transport for URLs ending with `/sse`
    - HTTP transport for standard MCP endpoints
    - Auto-detection of transport type via Content-Type header

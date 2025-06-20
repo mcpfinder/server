@@ -48,6 +48,18 @@ function askQuestion(rl, query) {
     });
 }
 
+// Helper function to handle both headless and interactive prompts
+function getInput(rl, query, headlessValue = null, defaultValue = '') {
+    if (headlessValue !== null && headlessValue !== undefined) {
+        console.log(chalk.dim(`${query} [headless] ${headlessValue}`));
+        return Promise.resolve(headlessValue);
+    }
+    if (!rl) {
+        return Promise.resolve(defaultValue);
+    }
+    return askQuestion(rl, query);
+}
+
 // Function to validate package name/URL
 function isValidPackageNameOrUrl(input) {
     if (!input || typeof input !== 'string') return false;
@@ -65,7 +77,15 @@ function isValidPackageNameOrUrl(input) {
     }
     
     // Check if it's a valid npm package name
-    return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
+    // Must be longer than 1 character and follow npm naming rules
+    if (trimmed.length <= 1) return false;
+    
+    // Reject common invalid names
+    const invalidNames = ['packages', 'npm', 'node', 'js', 'javascript', 'mcp', 'server'];
+    if (invalidNames.includes(trimmed.toLowerCase())) return false;
+    
+    // Allow npm packages and GitHub-style org/repo names
+    return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$|^[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
 }
 
 // Function to clean and validate a tag
@@ -161,7 +181,7 @@ async function probeServerMinimal(url) {
 }
 
 // Function to introspect MCP server
-export async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = null) {
+export async function introspectMCPServer(packageOrUrl, tempDir = null, authToken = null, headlessOptions = {}) {
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
     let transport;
     let client;
@@ -202,15 +222,35 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                 }
             }
         } else {
-            // STDIO transport for npm packages
+            // STDIO transport for npm/Python packages
             const actualTempDir = tempDir || mkdtempSync(join(tmpdir(), 'mcp-register-'));
-            transport = new StdioClientTransport({
-                command: 'npx',
-                args: ['-y', packageOrUrl],
-                env: process.env,
-                stderr: 'pipe',
-                cwd: actualTempDir
-            });
+            
+            // Determine if it's a Python package (uvx) based on naming patterns or explicit uvx prefix
+            const isPythonPackage = packageOrUrl.startsWith('uvx:') || 
+                                   packageOrUrl.includes('_') || // Python packages often use underscores
+                                   packageOrUrl.endsWith('.py') ||
+                                   false; // Will be detected later if uvx is specified in headless options
+            
+            if (isPythonPackage || (headlessOptions && headlessOptions.useUvx)) {
+                // Use uvx for Python packages
+                const cleanPackage = packageOrUrl.replace(/^uvx:/, ''); // Remove uvx: prefix if present
+                transport = new StdioClientTransport({
+                    command: 'uvx',
+                    args: [cleanPackage],
+                    env: process.env,
+                    stderr: 'pipe',
+                    cwd: actualTempDir
+                });
+            } else {
+                // Use npx for npm packages (default)
+                transport = new StdioClientTransport({
+                    command: 'npx',
+                    args: ['-y', packageOrUrl],
+                    env: process.env,
+                    stderr: 'pipe',
+                    cwd: actualTempDir
+                });
+            }
         }
         
         // Connect to the MCP server
@@ -325,8 +365,8 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
         };
         
     } catch (error) {
-        // If it's a URL and direct connection failed, try via mcp-remote
-        if (isUrl) {
+        // If it's a URL and direct connection failed, try via mcp-remote (but not for GitHub)
+        if (isUrl && !packageOrUrl.includes('github.com/')) {
             console.log(chalk.yellow('\nDirect connection failed. Trying via mcp-remote as stdio transport...'));
             
             try {
@@ -500,18 +540,42 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
     
     // Determine installation instructions
     const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
+    const isGitHub = isUrl && packageOrUrl.includes('github.com/');
     
     // If this server needs mcp-remote (failed HTTP/SSE connection), use stdio transport
     const useMcpRemote = additionalInfo.useMcpRemote;
-    const installation = isUrl ? 
-        (useMcpRemote ? {
+    let installation;
+    
+    if (isGitHub) {
+        // GitHub repos need to be cloned and run locally
+        installation = {
+            command: 'git',
+            args: ['clone', packageOrUrl]
+        };
+    } else if (isUrl) {
+        installation = useMcpRemote ? {
             command: 'npx',
             args: ['mcp-remote', packageOrUrl]
-        } : undefined) : 
-        {
-            command: 'npx',
-            args: ['-y', packageOrUrl]
-        };
+        } : undefined;
+    } else {
+        // Check if it's a Python package (uvx)
+        const isPythonPackage = packageOrUrl.startsWith('uvx:') || 
+                               additionalInfo.useUvx || 
+                               (additionalInfo.installCommand === 'uvx');
+        
+        if (isPythonPackage) {
+            const cleanPackage = packageOrUrl.replace(/^uvx:/, ''); // Remove uvx: prefix if present
+            installation = {
+                command: 'uvx',
+                args: [cleanPackage]
+            };
+        } else {
+            installation = {
+                command: 'npx',
+                args: ['-y', packageOrUrl]
+            };
+        }
+    }
     
     // Determine a good name for the manifest
     let name = serverInfo?.name;
@@ -593,7 +657,7 @@ async function submitToRegistry(manifest) {
 }
 
 // Main registration function
-export async function runRegister() {
+export async function runRegister(headlessOptions = {}) {
     console.log(chalk.bold.blue('\n📋 Register Your MCP Server with MCPfinder\n'));
     
     // Ensure stdin doesn't close prematurely
@@ -603,13 +667,15 @@ export async function runRegister() {
         process.stdin.setRawMode(false);
     }
     
-    const rl = createPromptInterface();
+    const rl = headlessOptions.headless ? null : createPromptInterface();
     
-    // Set encoding to handle paste properly
-    rl.input.setEncoding('utf8');
-    
-    // Remove any existing line event listeners to prevent issues
-    rl.removeAllListeners('line');
+    if (rl) {
+        // Set encoding to handle paste properly
+        rl.input.setEncoding('utf8');
+        
+        // Remove any existing line event listeners to prevent issues
+        rl.removeAllListeners('line');
+    }
     let tempDir = null;
     
     try {
@@ -617,25 +683,78 @@ export async function runRegister() {
         let packageOrUrl = '';
         let introspectionResult = null;
         
+        // Default introspection result for failed connections
+        const defaultIntrospectionResult = {
+            isValid: false,
+            isManual: false,
+            isMinimal: false,
+            error: 'Failed to connect',
+            tools: [],
+            resources: [],
+            prompts: [],
+            capabilities: {},
+            serverInfo: null,
+            probeInfo: null
+        };
+        
+        // In headless mode, get package from options
+        if (headlessOptions.headless && headlessOptions.packageOrUrl) {
+            packageOrUrl = headlessOptions.packageOrUrl;
+            if (!isValidPackageNameOrUrl(packageOrUrl)) {
+                throw new Error(`Invalid package name or URL format: ${packageOrUrl}`);
+            }
+        }
+        
         while (!introspectionResult || !introspectionResult.isValid) {
             // Ask for package name/URL
-            packageOrUrl = ''; // Reset before asking
-            while (!isValidPackageNameOrUrl(packageOrUrl)) {
-                try {
-                    packageOrUrl = await askQuestion(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ');
-                    // Input validation working correctly
-                    if (!isValidPackageNameOrUrl(packageOrUrl)) {
-                        console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+            if (!packageOrUrl) {
+                while (!isValidPackageNameOrUrl(packageOrUrl)) {
+                    try {
+                        packageOrUrl = await getInput(rl, 'Enter your npm package name (e.g., @username/my-mcp-server) or HTTP/SSE URL: ', headlessOptions.packageOrUrl);
+                        // Input validation working correctly
+                        if (!isValidPackageNameOrUrl(packageOrUrl)) {
+                            if (headlessOptions.headless) {
+                                throw new Error(`Invalid package name or URL format: ${packageOrUrl}`);
+                            }
+                            console.log(chalk.red('Invalid package name or URL format. Please try again.'));
+                            packageOrUrl = ''; // Reset to continue loop
+                        }
+                    } catch (err) {
+                        if (headlessOptions.headless) {
+                            throw err;
+                        }
+                        console.error(chalk.red('Error reading input:', err.message));
                         packageOrUrl = ''; // Reset to continue loop
                     }
-                } catch (err) {
-                    console.error(chalk.red('Error reading input:', err.message));
-                    packageOrUrl = ''; // Reset to continue loop
                 }
             }
             
+            // In headless mode, we'll try introspection once and handle failures appropriately
+            // Don't break here - let it continue to introspection
+            
             packageOrUrl = packageOrUrl.trim();
             const isUrl = packageOrUrl.startsWith('http://') || packageOrUrl.startsWith('https://');
+            const isGitHub = isUrl && packageOrUrl.includes('github.com/');
+            
+            // For GitHub repos, skip introspection and register directly
+            if (isGitHub) {
+                console.log(chalk.yellow('\n📦 GitHub repository detected. Registering without introspection...'));
+                introspectionResult = {
+                    isValid: true,
+                    isGitHub: true,
+                    isMinimal: true,
+                    serverInfo: {
+                        name: packageOrUrl.split('/').pop()?.replace('.git', '') || 'Unknown',
+                        version: 'Unknown'
+                    },
+                    capabilities: {},
+                    tools: [],
+                    resources: [],
+                    prompts: [],
+                    useMcpRemote: false
+                };
+                break; // Exit the loop
+            }
             
             // Introspect the MCP server
             console.log(chalk.blue('\n⏳ Connecting to MCP server and verifying capabilities...'));
@@ -648,10 +767,26 @@ export async function runRegister() {
                     } catch (e) {}
                 }
                 tempDir = !isUrl ? mkdtempSync(join(tmpdir(), 'mcp-register-')) : null;
-                introspectionResult = await introspectMCPServer(packageOrUrl, tempDir);
+                introspectionResult = await introspectMCPServer(packageOrUrl, tempDir, null, headlessOptions);
                 
                 if (!introspectionResult.isValid) {
                     console.log(chalk.red(`❌ Cannot connect to MCP server: ${introspectionResult.error}`));
+                    
+                    // In headless mode, fail fast - don't register servers we can't connect to
+                    if (headlessOptions.headless) {
+                        throw new Error(`Cannot connect to MCP server: ${introspectionResult.error}`);
+                    }
+                } else if (introspectionResult.isValid && 
+                          introspectionResult.tools.length === 0 && 
+                          introspectionResult.resources.length === 0 && 
+                          introspectionResult.prompts.length === 0) {
+                    // Server connected but has no capabilities
+                    console.log(chalk.yellow('⚠️  Server connected but reports no capabilities'));
+                    
+                    if (headlessOptions.headless) {
+                        // In headless mode, skip servers with no capabilities
+                        throw new Error('Server has no MCP capabilities');
+                    }
                     
                     // Check if it's an authentication error
                     if (introspectionResult.error.includes('401') || introspectionResult.error.includes('Authentication required') || introspectionResult.error.includes('Unauthorized')) {
@@ -677,16 +812,16 @@ export async function runRegister() {
                         }
                         
                         // Ask if user has a token
-                        const hasTokenAnswer = await askQuestion(rl, '\nDo you have an authentication token for this server? (y/n): ');
+                        const hasTokenAnswer = await getInput(rl, '\nDo you have an authentication token for this server? (y/n): ', headlessOptions.authToken ? 'y' : 'n');
                         
                         if (hasTokenAnswer.toLowerCase() === 'y') {
-                            const token = await askQuestion(rl, 'Please enter your authentication token: ');
+                            const token = await getInput(rl, 'Please enter your authentication token: ', headlessOptions.authToken);
                             
                             if (token) {
                                 console.log(chalk.blue('\n⏳ Retrying with authentication token...'));
                                 
                                 // Retry introspection with token
-                                const retryResult = await introspectMCPServer(packageOrUrl, tempDir, token);
+                                const retryResult = await introspectMCPServer(packageOrUrl, tempDir, token, headlessOptions);
                                 
                                 if (retryResult.isValid) {
                                     introspectionResult = retryResult;
@@ -699,7 +834,7 @@ export async function runRegister() {
                         
                         // If still no valid introspection, proceed with manual/minimal registration
                         if (!introspectionResult.isValid) {
-                            const addCapabilitiesAnswer = await askQuestion(rl, '\nWould you like to manually add capability information? (y/n): ');
+                            const addCapabilitiesAnswer = await getInput(rl, '\nWould you like to manually add capability information? (y/n): ', headlessOptions.manualCapabilities);
                             
                             if (addCapabilitiesAnswer.toLowerCase() === 'y') {
                                 // Manual capability entry
@@ -740,11 +875,22 @@ export async function runRegister() {
                 }
             } catch (introspectError) {
                 console.log(chalk.red(`❌ Failed to introspect: ${introspectError.message}`));
-                // Full error details available if needed
+                
+                // In headless mode, exit with error
+                if (headlessOptions.headless) {
+                    throw introspectError;
+                }
+                
+                // In interactive mode, allow retry
                 console.log(chalk.yellow('Please try a different package or URL.\n'));
                 packageOrUrl = ''; // Reset to ask again
                 introspectionResult = null; // Reset to continue loop
             }
+        }
+        
+        // Ensure we have a valid introspectionResult
+        if (!introspectionResult) {
+            introspectionResult = defaultIntrospectionResult;
         }
         
         // Check if this server already exists (for unverified updates)
@@ -778,7 +924,7 @@ export async function runRegister() {
         }
         
         // Display discovered capabilities (skip for manual/minimal registration)
-        if (!introspectionResult.isManual && !introspectionResult.isMinimal) {
+        if (introspectionResult && !introspectionResult.isManual && !introspectionResult.isMinimal) {
             console.log(chalk.cyan('\n📊 Discovered Capabilities:\n'));
             console.log(`${chalk.bold('Server:')} ${introspectionResult.serverInfo?.name || 'Unknown'}`);
             console.log(`${chalk.bold('Version:')} ${introspectionResult.serverInfo?.version || 'Unknown'}`);
@@ -804,14 +950,14 @@ export async function runRegister() {
         let description, tags = [], requiresApiKey = false, authInfo = {};
         
         // For manual/minimal registration of authenticated servers, always set auth required
-        if (introspectionResult.isManual || introspectionResult.isMinimal) {
+        if (introspectionResult && (introspectionResult.isManual || introspectionResult.isMinimal)) {
             requiresApiKey = true;
         }
         
         if (!hasSecret && isUpdate && existingServer && !existingServer.tags?.includes('unanalyzed')) {
             // Unauthorized update for already-analyzed servers - skip all questions
             console.log(chalk.dim('\nSkipping questions for unauthorized update...'));
-            description = introspectionResult.serverInfo?.description || `MCP server: ${packageOrUrl}`;
+            description = introspectionResult?.serverInfo?.description || `MCP server: ${packageOrUrl}`;
             
             // Clean up existing tags to match API requirements
             if (existingServer.tags && Array.isArray(existingServer.tags)) {
@@ -840,18 +986,18 @@ export async function runRegister() {
             }
         } else {
             // New registration or authorized update - ask all questions
-            // Ensure readline is still active
-            if (!rl) {
+            // Ensure readline is still active (unless in headless mode)
+            if (!rl && !headlessOptions.headless) {
                 console.error(chalk.red('\nError: Readline interface was closed unexpectedly'));
                 throw new Error('Readline interface closed');
             }
-            const defaultDescription = introspectionResult.serverInfo?.description || '';
+            const defaultDescription = introspectionResult?.serverInfo?.description || '';
             const descriptionPrompt = defaultDescription 
                 ? `\nProvide a brief description of your MCP server [${defaultDescription}]: `
                 : '\nProvide a brief description of your MCP server: ';
             
             try {
-                description = await askQuestion(rl, descriptionPrompt);
+                description = await getInput(rl, descriptionPrompt, headlessOptions.description);
                 if (!description) description = defaultDescription;
             } catch (questionError) {
                 console.error(chalk.red('\nError reading input:', questionError.message));
@@ -860,7 +1006,7 @@ export async function runRegister() {
             
             let tagsInput;
             try {
-                tagsInput = await askQuestion(rl, 'Enter tags (comma-separated, lowercase, letters/numbers/hyphens only, e.g., ai, github, productivity): ');
+                tagsInput = await getInput(rl, 'Enter tags (comma-separated, lowercase, letters/numbers/hyphens only, e.g., ai, github, productivity): ', headlessOptions.tags);
             } catch (questionError) {
                 console.error(chalk.red('\nError reading input:', questionError.message));
                 throw questionError;
@@ -894,26 +1040,34 @@ export async function runRegister() {
             }
             
             // Add automatic tags for minimal registration
-            if (introspectionResult.isMinimal) {
+            if (introspectionResult && introspectionResult.isMinimal && !introspectionResult.isGitHub) {
                 if (!tags.includes('unanalyzed')) tags.push('unanalyzed');
                 if (!tags.includes('auth-required')) tags.push('auth-required');
             }
             
+            // Add tags for GitHub repos
+            if (introspectionResult && introspectionResult.isGitHub) {
+                if (!tags.includes('unanalyzed')) tags.push('unanalyzed');
+                if (!tags.includes('github')) tags.push('github');
+                if (!tags.includes('requires-installation')) tags.push('requires-installation');
+            }
+            
             // For servers that couldn't be introspected due to auth, requiresApiKey is already set
             // For normal servers, ask the user
-            if (!introspectionResult.isManual && !introspectionResult.isMinimal) {
+            // Skip API key question for GitHub repos
+            if (introspectionResult && !introspectionResult.isManual && !introspectionResult.isMinimal && !introspectionResult.isGitHub) {
                 let requiresApiKeyAnswer;
                 try {
-                    requiresApiKeyAnswer = await askQuestion(rl, 'Does this server require an API key? (y/n): ');
+                    requiresApiKeyAnswer = await getInput(rl, 'Does this server require an API key? (y/n): ', headlessOptions.requiresApiKey);
                 } catch (questionError) {
                     console.error(chalk.red('\nError reading input:', questionError.message));
                     throw questionError;
                 }
-                requiresApiKey = requiresApiKeyAnswer.toLowerCase() === 'y';
+                requiresApiKey = typeof requiresApiKeyAnswer === 'boolean' ? requiresApiKeyAnswer : requiresApiKeyAnswer.toLowerCase() === 'y';
             }
             
             if (requiresApiKey) {
-                if (introspectionResult.isManual || introspectionResult.isMinimal) {
+                if (introspectionResult && (introspectionResult.isManual || introspectionResult.isMinimal)) {
                     // Determine auth type from probe info or ask user
                     let authType = 'oauth'; // default
                     
@@ -926,14 +1080,14 @@ export async function runRegister() {
                     
                     // For manual entry, let user override detected type
                     if (introspectionResult.isManual) {
-                        const userAuthType = await askQuestion(rl, `Authentication type (oauth/api-key/custom) [${authType}]: `);
+                        const userAuthType = await getInput(rl, `Authentication type (oauth/api-key/custom) [${authType}]: `, headlessOptions.authType);
                         if (userAuthType) authType = userAuthType;
                         
                         // For manual registration, ask about capabilities
                         console.log(chalk.yellow('\nSince we couldn\'t introspect the server, please provide capability details:'));
-                        const hasTools = await askQuestion(rl, 'Does this server provide tools? (y/n): ');
-                        const hasResources = await askQuestion(rl, 'Does this server provide resources? (y/n): ');
-                        const hasPrompts = await askQuestion(rl, 'Does this server provide prompts? (y/n): ');
+                        const hasTools = await getInput(rl, 'Does this server provide tools? (y/n): ', headlessOptions.hasTools);
+                        const hasResources = await getInput(rl, 'Does this server provide resources? (y/n): ', headlessOptions.hasResources);
+                        const hasPrompts = await getInput(rl, 'Does this server provide prompts? (y/n): ', headlessOptions.hasPrompts);
                         
                         // Create placeholder capabilities
                         if (hasTools.toLowerCase() === 'y') {
@@ -965,19 +1119,19 @@ export async function runRegister() {
                     } else {
                         // For manual registration, ask for details
                         if (authType === 'oauth') {
-                            authInfo.authInstructions = await askQuestion(rl, 'OAuth instructions (e.g., how to authenticate): ') || 'OAuth authentication required';
+                            authInfo.authInstructions = await getInput(rl, 'OAuth instructions (e.g., how to authenticate): ', headlessOptions.authInstructions) || 'OAuth authentication required';
                         } else if (authType === 'api-key') {
-                            authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key: ');
-                            authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                            authInfo.keyName = await getInput(rl, 'Environment variable name for the API key: ', headlessOptions.keyName);
+                            authInfo.authInstructions = await getInput(rl, 'Instructions for obtaining the API key: ', headlessOptions.authInstructions) || 'Set the API key as an environment variable';
                         } else {
-                            authInfo.authInstructions = await askQuestion(rl, 'Authentication instructions: ') || 'Custom authentication required';
+                            authInfo.authInstructions = await getInput(rl, 'Authentication instructions: ', headlessOptions.authInstructions) || 'Custom authentication required';
                         }
                     }
                 } else {
                     // Regular auth for introspected servers
                     authInfo.type = 'api-key'; // default for regular servers
-                    authInfo.keyName = await askQuestion(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ');
-                    authInfo.authInstructions = await askQuestion(rl, 'Instructions for obtaining the API key: ') || 'Set the API key as an environment variable';
+                    authInfo.keyName = await getInput(rl, 'Environment variable name for the API key (e.g., GITHUB_TOKEN): ', headlessOptions.keyName);
+                    authInfo.authInstructions = await getInput(rl, 'Instructions for obtaining the API key: ', headlessOptions.authInstructions) || 'Set the API key as an environment variable';
                 }
             }
         }
@@ -1002,7 +1156,7 @@ export async function runRegister() {
             console.log(chalk.gray(JSON.stringify(manifest, null, 2)));
             
             // Confirm submission
-            const confirmAnswer = await askQuestion(rl, '\nSubmit this manifest to MCPfinder registry? (y/n): ');
+            const confirmAnswer = await getInput(rl, '\nSubmit this manifest to MCPfinder registry? (y/n): ', headlessOptions.confirm);
             if (confirmAnswer.toLowerCase() !== 'y') {
                 console.log(chalk.yellow('\nRegistration cancelled'));
                 return;
@@ -1048,7 +1202,9 @@ export async function runRegister() {
         }
         process.exit(1);
     } finally {
-        rl.close();
+        if (rl) {
+            rl.close();
+        }
         
         // Cleanup temp directory
         if (tempDir) {
