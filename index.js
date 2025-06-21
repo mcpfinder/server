@@ -231,7 +231,7 @@ async function get_mcp_server_details(input) {
              installationDetails.command = ['npx', 'mcp-remote', manifest.url];
         } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
              // NPM package
-             installationDetails.command = ['npx', '-y', manifest.url];
+             installationDetails.command = ['npx', manifest.url];
         }
         if (manifest.auth && manifest.auth.type === 'api-key') {
             const envVarName = `${manifest.name.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}_API_KEY`;
@@ -551,8 +551,8 @@ async function add_mcp_server_config(input) {
           commandToUse = ['npx', 'mcp-remote', manifest.url];
           console.error(`[add_mcp_server_config] HTTP/SSE server detected, using mcp-remote wrapper: ${JSON.stringify(commandToUse)}`);
         } else if (manifest.url && !manifest.url.startsWith('http://') && !manifest.url.startsWith('https://')) {
-          // NPM package - use standard npx -y approach
-          commandToUse = ['npx', '-y', manifest.url];
+          // NPM package - use standard npx approach
+          commandToUse = ['npx', manifest.url];
           console.error(`[add_mcp_server_config] NPM package detected: ${JSON.stringify(commandToUse)}`);
         } else {
           console.warn(`[add_mcp_server_config] Could not determine default command for ${server_id} from manifest URL.`);
@@ -1103,7 +1103,11 @@ if (isSetupCommand) {
       // Extract headless mode options
       const headlessOptions = {
         headless: args.includes('--headless'),
-        packageOrUrl: args.find((arg, i) => i > 0 && args[i-1] === 'register' && !arg.startsWith('--')),
+        packageOrUrl: args.find((arg, i) => {
+          // Find non-flag argument after 'register' (excluding known flags)
+          const registerIndex = args.indexOf('register');
+          return i > registerIndex && !arg.startsWith('--') && !knownCommands.includes(arg);
+        }),
         description: getArgValue('--description'),
         tags: getArgValue('--tags'),
         authToken: getArgValue('--auth-token'),

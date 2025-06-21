@@ -84,8 +84,9 @@ function isValidPackageNameOrUrl(input) {
     const invalidNames = ['packages', 'npm', 'node', 'js', 'javascript', 'mcp', 'server'];
     if (invalidNames.includes(trimmed.toLowerCase())) return false;
     
-    // Allow npm packages and GitHub-style org/repo names
-    return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$|^[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
+    // Allow npm packages and GitHub-style org/repo names, with optional version tags
+    // Matches: package, @scope/package, package@version, @scope/package@version, org/repo
+    return /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(@[a-z0-9-._~]+)?$|^[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-~][a-z0-9-._~]*$/i.test(trimmed);
 }
 
 // Function to clean and validate a tag
@@ -245,7 +246,7 @@ export async function introspectMCPServer(packageOrUrl, tempDir = null, authToke
                 // Use npx for npm packages (default)
                 transport = new StdioClientTransport({
                     command: 'npx',
-                    args: ['-y', packageOrUrl],
+                    args: [packageOrUrl],
                     env: process.env,
                     stderr: 'pipe',
                     cwd: actualTempDir
@@ -572,7 +573,7 @@ function generateManifest(packageOrUrl, introspectionResult, additionalInfo = {}
         } else {
             installation = {
                 command: 'npx',
-                args: ['-y', packageOrUrl]
+                args: [packageOrUrl]
             };
         }
     }
