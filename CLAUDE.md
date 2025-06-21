@@ -1,5 +1,12 @@
 # MCPfinder Server CLI Documentation
 
+## IMPORTANT: No Scraping Functionality Here
+**DO NOT mention or implement any scraping, crawling, or automated discovery features in this directory.**
+All such tools have been intentionally moved to a separate location. This package focuses ONLY on:
+- Searching the MCPfinder registry API
+- Managing MCP configurations
+- Registering individual servers
+
 ## Overview
 MCPfinder Server is a CLI tool for discovering and registering MCP (Model Context Protocol) servers with the MCPfinder registry.
 
@@ -140,3 +147,18 @@ MCP_REGISTRY_SECRET=your-secret node src/register.js
 - No spinner animations (causes readline conflicts)
 - Supports both ESM and CommonJS
 - Node.js 18+ required
+
+## Developer Notes
+
+### Scope Boundaries
+This package is strictly limited to:
+1. **Registry Integration**: Search and retrieve from MCPfinder API only
+2. **Configuration Management**: Add/remove servers from client configs
+3. **Manual Registration**: One-at-a-time server registration via CLI
+
+### What NOT to Include
+- No bulk discovery or automation features
+- No web scraping or crawling functionality  
+- No references to external data sources
+- No batch processing of servers
+- Keep the package focused on end-user tools only
