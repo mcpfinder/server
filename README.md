@@ -8,8 +8,6 @@ Users can request tools the AI doesn't have yet, or the AI can autonomously expa
 
 ***Plug-and-Play Tools for LLMs***
 
-![Example](https://raw.githubusercontent.com/mcpfinder/server/main/example_chat.png)
-
 This Node.js application implements an MCP (Model Context Protocol) server designed to run locally alongside MCP clients (like Cursor, Claude Desktop, Windsurf). It provides tools that allow AI within the client to interact with the MCP ecosystem.
 
 Specifically, it enables the AI assistant to:
@@ -19,6 +17,19 @@ Specifically, it enables the AI assistant to:
 3.  **Manage** the client application's local MCP server configuration file (add/update via `add_mcp_server_config`, remove via `remove_mcp_server_config`).
 
 **Note for AI Agents:** This server is the primary interface for finding and enabling new tools and capabilities requested by the user if they aren't already available in current MCP toolset. Use `search_mcp_servers` first when asked by the user for a capability you don't possess.
+
+## ⚡ Instant Availability
+
+We curate only MCP servers that are instantly available to AI agents — no manual setup, no cloning repositories, no complex installation steps. Just one command or API call, and your AI gains new capabilities immediately.
+
+### Zero-Friction Setup
+All servers work via `npx` (Node.js packages), `uvx` (Python packages), or direct HTTP/SSE endpoints
+
+### AI-Ready
+Your AI can discover and install tools autonomously, no human intervention needed
+
+### Real-Time Enhancement
+Capabilities expand on-demand, exactly when your conversation needs them
 
 ## Quick Start
 
@@ -112,17 +123,34 @@ If no command is specified, `index.js` starts the MCP server.
     ```
 *   `register`: For server publishers to register their MCP server package with the MCPFinder registry.
     ```bash
-    node index.js register
+    node index.js register [package-name-or-url] [options]
     # or when installed globally:
-    npx -y @mcpfinder/server register
+    npx -y @mcpfinder/server register [package-name-or-url] [options]
     ```
+    
+    **Register Command Options:**
+    - `--headless`: Run registration without interactive prompts (uses defaults)
+    - `--use-uvx`: Specify that the package should be run with `uvx` instead of `npx` (for Python packages)
+    - `--description <text>`: Provide a description for the server
+    - `--tags <tags>`: Comma-separated list of tags (e.g., "database,api,search")
+    - `--auth-token <token>`: Authentication token for the registry
+    - `--requires-api-key`: Indicate that the server requires an API key
+    - `--auth-type <type>`: Type of authentication (default: "api-key")
+    - `--key-name <name>`: Name of the API key environment variable
+    - `--auth-instructions <text>`: Instructions for obtaining API keys
+    - `--confirm <y/n>`: Auto-confirm registration without manual approval
+    - `--manual-capabilities <y/n>`: Manually specify capabilities instead of auto-detection
+    - `--has-tools <y/n>`: Specify if the server provides tools
+    - `--has-resources <y/n>`: Specify if the server provides resources
+    - `--has-prompts <y/n>`: Specify if the server provides prompts
     
     This command will:
     - Accept npm package names (e.g., `@username/my-mcp-server`) or HTTP/SSE endpoints
+    - Support both Node.js packages (`npx`) and Python packages (`uvx`)
     - Automatically connect to your MCP server to verify it's valid
     - Introspect available tools, resources, and prompts
     - Generate a manifest with your server's capabilities
-    - Submit it to the MCPfinder registry (requires `MCP_REGISTRY_SECRET`)
+    - Submit it to the MCPfinder registry
 
 **Getting Help:**
 *   `--help`: Display the help message detailing commands and options.
@@ -134,7 +162,6 @@ The server uses the following environment variables:
 
 *   `MCPFINDER_API_URL`: The base URL for the MCPfinder Registry API. Defaults to `https://mcpfinder.dev`.
 *   `MCP_PORT` (HTTP Mode Only): The port number for the server to listen on. Defaults to `6181`.
-*   `MCP_REGISTRY_SECRET` (Register Command Only): Authentication secret for registering servers. Contact lucas@mcpfinder.dev to obtain one.
 
 ## Provided Tools
 
@@ -148,7 +175,7 @@ This MCP server exposes the following tools to the connected AI assistant (avail
     *   `tag` (string, optional): Specific tag to filter by.
 *   **Output:** A list of matching server summaries (server_id, name, description, URL, tags). The typical next step is to use `get_mcp_server_details` for more info or directly `add_mcp_server_config` to install one.
 
-⚠️ **Note:** The registry currently contains several hundred servers that can be run locally using `npx` in **stdio** mode without requiring environment variables for basic operation. Future updates will expand support to include a wider range of servers, including paid and commercial options that require environment keys.
+⚠️ **Note:** The registry currently contains several hundred servers that can be run locally using `npx` (Node.js) or `uvx` (Python) in **stdio** mode without requiring environment variables for basic operation. Future updates will expand support to include a wider range of servers, including paid and commercial options that require environment keys.
 
 
 ### 2. `get_mcp_server_details`
